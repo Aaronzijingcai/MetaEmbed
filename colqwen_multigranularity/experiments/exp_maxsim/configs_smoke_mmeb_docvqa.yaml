@@ -1,0 +1,3 @@
+MMEB-eval-DocVQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-DocVQA-beir-v3

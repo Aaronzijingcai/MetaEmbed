@@ -1,0 +1,31 @@
+# eval_dataset_loader:
+syntheticDocQA_energy:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/syntheticDocQA_energy_test_beir
+syntheticDocQA_healthcare_industry:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/syntheticDocQA_healthcare_industry_test_beir
+syntheticDocQA_artificial_intelligence_test:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/syntheticDocQA_artificial_intelligence_test_beir
+syntheticDocQA_government_reports:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/syntheticDocQA_government_reports_test_beir
+infovqa_subsampled:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/infovqa_test_subsampled_beir
+docvqa_subsampled:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/docvqa_test_subsampled_beir
+arxivqa_subsampled:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/arxivqa_test_subsampled_beir
+tabfquad_subsampled:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/tabfquad_test_subsampled_beir
+tatdqa:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/tatdqa_test_beir
+shift_project:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path /PATH_TO_YOUR_EVALUATION/shiftproject_test_beir

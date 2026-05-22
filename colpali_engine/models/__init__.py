@@ -1,20 +1,34 @@
-from .idefics3 import ColIdefics3, ColIdefics3Processor
+from importlib import import_module
+from typing import Any
 
-from .llama3vision.modeling_lastllama3vision import LastLlama3Vision
-from .paligemma import (
-    BiPali,
-    BiPaliProcessor,
-    BiPaliProj,
-    ColPali,
-    ColPaliProcessor,
-    LastPali,
-)
-from .qwen2 import BiQwen2, BiQwen2Processor, ColQwen2, ColQwen2Processor
-from .qwen2_5 import (
-    BiQwen2_5,
-    BiQwen2_5_Processor,
-    ColQwen2_5,
-    ColQwen2_5_Processor,
-    LastQwen2_5,
-)
-from .qwen3 import LastQwen3
+_EXPORTS = {
+    "ColIdefics3": "colpali_engine.models.idefics3",
+    "ColIdefics3Processor": "colpali_engine.models.idefics3",
+    "LastLlama3Vision": "colpali_engine.models.llama3vision.modeling_lastllama3vision",
+    "BiPali": "colpali_engine.models.paligemma",
+    "BiPaliProcessor": "colpali_engine.models.paligemma",
+    "BiPaliProj": "colpali_engine.models.paligemma",
+    "ColPali": "colpali_engine.models.paligemma",
+    "ColPaliProcessor": "colpali_engine.models.paligemma",
+    "LastPali": "colpali_engine.models.paligemma",
+    "BiQwen2": "colpali_engine.models.qwen2",
+    "BiQwen2Processor": "colpali_engine.models.qwen2",
+    "ColQwen2": "colpali_engine.models.qwen2",
+    "ColQwen2Processor": "colpali_engine.models.qwen2",
+    "BiQwen2_5": "colpali_engine.models.qwen2_5",
+    "BiQwen2_5_Processor": "colpali_engine.models.qwen2_5",
+    "ColQwen2_5": "colpali_engine.models.qwen2_5",
+    "ColQwen2_5_Processor": "colpali_engine.models.qwen2_5",
+    "LastQwen2_5": "colpali_engine.models.qwen2_5",
+    "LastQwen3": "colpali_engine.models.qwen3",
+}
+
+__all__ = list(_EXPORTS.keys())
+
+
+def __getattr__(name: str) -> Any:
+    module_path = _EXPORTS.get(name)
+    if module_path is None:
+        raise AttributeError(name)
+    module = import_module(module_path)
+    return getattr(module, name)

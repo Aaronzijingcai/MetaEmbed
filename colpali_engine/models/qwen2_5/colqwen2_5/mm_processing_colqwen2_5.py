@@ -96,12 +96,6 @@ class MultimodalColQwen2_5_Processor(BaseVisualRetrieverProcessor, Qwen2_5_VLPro
 
         # self.processor_max_length = kwargs.get("processor_max_length", None)
         # if self.processor_max_length is not None:
-        #     max_num_visual_tokens = kwargs.get("max_num_visual_tokens", 16384)
-        #     # processor_max_length has to be larger than max_num_visual_tokens to avoid
-        #     # truncation of visual tokens -- which leads to size mismatch in model forward
-        #     assert (
-        #         self.processor_max_length >= max_num_visual_tokens
-        #     ), f"processor_max_length ({self.processor_max_length}) has to be larger than max_num_visual_tokens ({max_num_visual_tokens})."
         #     rank0_print(
         #         f"Using processor_max_length of {self.processor_max_length} for MultimodalColQwen2_5_Processor"
         #     )
@@ -122,13 +116,6 @@ class MultimodalColQwen2_5_Processor(BaseVisualRetrieverProcessor, Qwen2_5_VLPro
             **kwargs,
         )
         # default setting is 16,384
-        if "max_num_visual_tokens" in kwargs:
-            instance.image_processor.max_pixels = (
-                kwargs["max_num_visual_tokens"] * 28 * 28
-            )
-            instance.image_processor.size["longest_edge"] = (
-                instance.image_processor.max_pixels
-            )
         # move all initalized attrs here
         instance.use_simple_prompt = kwargs.get("use_simple_prompt", False)
         if instance.use_simple_prompt:
@@ -145,12 +132,6 @@ class MultimodalColQwen2_5_Processor(BaseVisualRetrieverProcessor, Qwen2_5_VLPro
         instance.debug_counter = 0
         instance.processor_max_length = kwargs.get("processor_max_length", None)
         if instance.processor_max_length is not None:
-            max_num_visual_tokens = kwargs.get("max_num_visual_tokens", 16384)
-            # processor_max_length has to be larger than max_num_visual_tokens to avoid
-            # truncation of visual tokens -- which leads to size mismatch in model forward
-            assert (
-                instance.processor_max_length >= max_num_visual_tokens
-            ), f"processor_max_length ({instance.processor_max_length}) has to be larger than max_num_visual_tokens ({max_num_visual_tokens})."
             rank0_print(
                 f"Using processor_max_length of {instance.processor_max_length} for MultimodalColQwen2_5_Processor"
             )

@@ -171,3 +171,20 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 *.ipynb
+# Local artifacts and training outputs
+/data_dir/
+/colqwen_multigranularity/data_dir
+/colqwen_multigranularity/models/
+/colqwen_multigranularity/runs/
+/colqwen_multigranularity/experiments/**/runs/
+/colqwen_multigranularity/experiments/**/results/
+/colqwen_multigranularity/experiments/**/plots/
+/colqwen_multigranularity/experiments/**/reference/
+/colqwen_multigranularity/experiments/**/assets/
+/colqwen_multigranularity/experiments/**/archive/
+/colqwen_multigranularity/experiments/**/.cache/
+/colqwen_multigranularity/experiments/**/wandb/
+*.ckpt
+*.safetensors
+*.bak
+*.bak_*

@@ -170,30 +170,24 @@ class Truncation:
         new_num_images = self.count_start(input_ids)
 
         # truncate the pixel_values and image_grid_thw
-        if input_ids.shape[0] == 1:
-            cum_num_images = torch.tensor([0]).to(input_ids.device)
-        else:
-            cum_num_images = torch.cat(
-                [
-                    torch.tensor([0]).to(input_ids.device),
-                    torch.cumsum(raw_num_images, dim=0)[:-1],
-                ]
-            )
+        cum_num_images = torch.cat(
+            [
+                torch.tensor([0]).to(input_ids.device),
+                torch.cumsum(raw_num_images, dim=0)[:-1],
+            ]
+        )
 
-        if image_grid_thw.shape[0] == 1:
-            cum_num_pixels = torch.tensor([0]).to(input_ids.device)
-        else:
-            cum_num_pixels = torch.cat(
-                [
-                    torch.tensor([0]).to(input_ids.device),
-                    torch.cumsum(
-                        image_grid_thw[:, 0]
-                        * image_grid_thw[:, 1]
-                        * image_grid_thw[:, 2],
-                        dim=0,
-                    )[:-1],
-                ]
-            )
+        cum_num_pixels = torch.cat(
+            [
+                torch.tensor([0]).to(input_ids.device),
+                torch.cumsum(
+                    image_grid_thw[:, 0]
+                    * image_grid_thw[:, 1]
+                    * image_grid_thw[:, 2],
+                    dim=0,
+                )[:-1],
+            ]
+        )
 
         selected_images_ids = torch.cat(
             [

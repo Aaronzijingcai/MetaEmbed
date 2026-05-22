@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+include = ["colpali_engine"]
+
+[project]
+name = "colpali_engine"
+dynamic = ["version"]
+description = "The code used to train and run inference with the ColPali architecture."
+authors = [
+    { name = "Manuel Faysse", email = "manuel.faysse@illuin.tech" },
+    { name = "Hugues Sibille", email = "hugues.sibille@illuin.tech" },
+    { name = "Tony Wu", email = "tony.wu@illuin.tech" },
+]
+maintainers = [
+    { name = "Manuel Faysse", email = "manuel.faysse@illuin.tech" },
+    { name = "Tony Wu", email = "tony.wu@illuin.tech" },
+]
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = []
+
+[project.urls]
+homepage = "https://github.com/illuin-tech/colpali"
+
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::Warning"]
+markers = ["slow: marks test as slow"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]

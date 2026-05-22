@@ -4,11 +4,10 @@ bm25_retriever==0.3
 configue==6.0.0
 datasets==3.6.0
 einops==0.8.2
-huggingface_hub==0.31.4
+huggingface_hub>=0.31.4,<1.0
 liger_kernel==0.5.10
 matplotlib==3.10.8
 mteb==1.38.12
-mteb==1.16.5
 numpy==2.4.2
 nvidia_ml_py==12.570.86
 packaging==26.0

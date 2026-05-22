@@ -1,0 +1,6 @@
+MSCOCO_t2i: {"weight": 1.0, "num_samples": 100000} #OK
+VisualNews_t2i: {"weight": 1.0, "num_samples": 100000} #OK
+VisDial: {"weight": 1.0, "num_samples": 50000} #OK
+WebQA: {"weight": 1.0, "num_samples": 50000} #OK
+tevatron_colpali: {"weight": 5.0, "num_samples": 999999}
+visrag_ind: {"weight": 5.0, "num_samples": 999999}

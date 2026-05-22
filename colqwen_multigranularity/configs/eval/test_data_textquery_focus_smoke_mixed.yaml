@@ -1,0 +1,6 @@
+syntheticDocQA_energy:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v1/syntheticDocQA_energy_test_beir
+MMEB-eval-VisDial-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VisDial-beir-v3

@@ -1,0 +1,3 @@
+docvqa_subsampled:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v1/docvqa_test_subsampled_beir
