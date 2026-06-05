@@ -16,6 +16,7 @@ class SoftAssignmentConfig:
     enabled: bool = True
     budgets: Tuple[int, int, int] = (64, 64, 128)
     keep_ratio: Optional[float] = None
+    keep_ratios: Optional[Tuple[float, float, float]] = None
     compress_stages: str = "all"
     temperature: float = 0.1
     learnable_temperature: bool = False
@@ -36,6 +37,12 @@ class SoftAssignmentConfig:
             raise ValueError("temperature must be positive.")
         if self.keep_ratio is not None and not (0.0 < float(self.keep_ratio) <= 1.0):
             raise ValueError("keep_ratio must be in (0, 1] when set.")
+        if self.keep_ratios is not None:
+            if len(self.keep_ratios) != self.stage_count:
+                raise ValueError(f"keep_ratios must contain {self.stage_count} values, got {self.keep_ratios}.")
+            for ratio in self.keep_ratios:
+                if not (0.0 < float(ratio) <= 1.0):
+                    raise ValueError("each keep_ratios value must be in (0, 1].")
 
     def active_stage_ids(self) -> Tuple[int, ...]:
         mode = str(self.compress_stages).lower()
@@ -56,6 +63,8 @@ class SoftAssignmentConfig:
     def to_dict(self) -> dict:
         data = asdict(self)
         data["budgets"] = list(self.budgets)
+        if self.keep_ratios is not None:
+            data["keep_ratios"] = list(self.keep_ratios)
         return data
 
     @classmethod
@@ -63,7 +72,16 @@ class SoftAssignmentConfig:
         payload = dict(data)
         if "budgets" in payload:
             payload["budgets"] = tuple(payload["budgets"])
+        if "keep_ratios" in payload and payload["keep_ratios"] is not None:
+            payload["keep_ratios"] = tuple(float(value) for value in payload["keep_ratios"])
         return cls(**payload)
+
+    def keep_ratio_for_stage(self, stage_index: int) -> Optional[float]:
+        if self.keep_ratios is not None:
+            return float(self.keep_ratios[int(stage_index)])
+        if self.keep_ratio is None:
+            return None
+        return float(self.keep_ratio)
 
     def save_pretrained(self, save_dir: str | Path) -> None:
         save_path = Path(save_dir)
@@ -177,7 +195,7 @@ class SoftAssignmentCompressor(nn.Module):
                 StageSoftAssignmentCompressor(
                     hidden_size=self.hidden_size,
                     budget=int(budget),
-                    keep_ratio=config.keep_ratio,
+                    keep_ratio=config.keep_ratio_for_stage(stage_index),
                     temperature=config.temperature,
                     learnable_temperature=config.learnable_temperature,
                     normalize_inputs=config.normalize_inputs,
@@ -185,7 +203,7 @@ class SoftAssignmentCompressor(nn.Module):
                     preserve_input_rms=config.preserve_input_rms,
                     eps=config.eps,
                 )
-                for budget in config.budgets
+                for stage_index, budget in enumerate(config.budgets)
             ]
         )
 

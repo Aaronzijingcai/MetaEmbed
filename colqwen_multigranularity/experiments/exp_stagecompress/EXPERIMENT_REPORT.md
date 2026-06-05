@@ -1,834 +1,169 @@
-# Exp StageCompress Report
+# Exp StageCompress Main Report
 
-## Goal
+This is the main report for `experiments/exp_stagecompress/`. It is kept as a
+clean project-level summary. Detailed launch commands and method-local notes
+stay in each method directory.
 
-This branch studies trainable and plug-in stage-wise token compression for the three-granularity MetaEmbed / MRL setup.
+## Current Direction
 
-The setup keeps the nested MRL retrieval structure unchanged:
+The compression work is organized into two major families:
 
-- `D1 = text + C1`
-- `D2 = text + C1 + C2`
-- `D3 = text + C1 + C2 + C3`
+- **MLP 之前压缩**: current main direction. Compression happens before
+  `custom_text_proj` / MLP, either before the LLM or inside early LLM layers.
+- **MLP 之后压缩**: archived direction. Compression happens after
+  `custom_text_proj`, so it does not reduce expensive LLM-side visual-token
+  computation.
 
-where `C1/C2/C3` are compressed versions of the original stage token groups `G1/G2/G3`.
+Pipeline reference:
 
-## Current Summary
-
-## Code Structure
-
-The implementation now follows a shared-pipeline + isolated-strategy structure.
-
-### Shared pipeline files
-
-- `train_stagecompress.py`
-  - shared training entry
-  - exposes `--stagecompress-method`
-- `eval_stagecompress.py`
-  - shared evaluation entry
-  - reuses the same method selector
-- `loss.py`
-  - shared loss path
-- `modeling_stagecompress.py`
-  - shared stage splitting / recombination logic
-  - hosts methods that need cross-stage or prefix-aware interaction
-- `compression.py`
-  - thin compatibility / dispatch layer
-
-### Strategy files
-
-- `strategies/common.py`
-  - shared config, scorer, helpers
-- `strategies/registry.py`
-  - method alias canonicalization and registry dispatch
-- `strategies/*.py`
-  - one file per stage-local compression strategy
-
-### Design rule
-
-- simple stage-local methods live entirely in `strategies/*.py`
-- methods that need prefix visibility or cross-stage coordination may additionally require logic in `modeling_stagecompress.py`
-- external train / eval / loss interfaces remain unchanged
-
-### Baseline and Compression Overview
-
-| ID | Method | Category | Core Selector / Aggregator | Status | Positioning |
-|---|---|---|---|---|---|
-| Baseline | MRL without stage compression | reference | no stage compression | available | external uncompressed baseline |
-| Strategy 1 | `strategy1_softassign` | trainable soft compression | prototype soft assignment | implemented | main soft assignment baseline |
-| Strategy 2 | `strategy2_softpool` | trainable soft compression | latent query pooling | implemented | main pooling baseline |
-| Strategy 3 | `strategy3_prumerge` | structured compression | keep + merge + residual | implemented | main structured merge baseline |
-| Strategy 4 | `strategy4_visionzip` | structured compression | dominant + contextual split | implemented | main VisionZip-style baseline |
-| Strategy 5 | `strategy5_folder` | merge compression | pairwise redundancy-aware merge | implemented | main Folder-style baseline |
-| Strategy 6 | `strategy6_scope` | selection compression | saliency + coverage greedy selection | implemented | main SCOPE-style baseline |
-| Strategy 4S | `strategy4s_scopevisionzip` | hybrid enhancement | SCOPE selector inside VisionZip | implemented | enhanced strategy4 |
-| Strategy 3S | `strategy3s_scopeprumerge` | hybrid enhancement | SCOPE selector inside PruMerge | implemented | enhanced strategy3 |
-| Strategy 7 | `strategy7_stage_resampler` | latent compression | learnable stage-specific resampler tokens | implemented | stage-local latent baseline |
-| Strategy 7M | `strategy7m_prefix_resampler` | latent compression | prefix-visible stage resampler tokens | implemented | MRL-style prefix-masked latent baseline |
-
-### Master Result Table
-
-The table below is the main global scoreboard. It includes the uncompressed MRL reference and the best known entry for every compression strategy currently tracked in this branch.
-
-| Method | Category | ViDoRe-v1 `ndcg@5` | ViDoRe-v2 `ndcg@5` | MMEB `recall@1` | Best Checkpoint | Status |
-|---|---|---:|---:|---:|---|---|
-| MRL baseline (no compression) | reference | 0.8981 | 0.6099 | 0.7580 | external main MRL run | available |
-| Strategy 1 `strategy1_softassign` | soft assignment | 0.8119 | 0.4737 | 0.7210 | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy1_softassign_nommE5_textquery_focus_4k/checkpoint-4000` | available |
-| Strategy 2 `strategy2_softpool` | soft pooling | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy2_softpool_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 3 `strategy3_prumerge` | keep+merge+residual | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3_prumerge_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 4 `strategy4_visionzip` | dominant+contextual | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4_visionzip_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 5 `strategy5_folder` | pairwise merge | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy5_folder_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 6 `strategy6_scope` | saliency+coverage pruning | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy6_scope_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 4S `strategy4s_scopevisionzip` | VisionZip + SCOPE selector | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4s_scopevisionzip_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 3S `strategy3s_scopeprumerge` | PruMerge + SCOPE selector | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3s_scopeprumerge_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 7 `strategy7_stage_resampler` | latent stage resampler | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7_stage_resampler_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-| Strategy 7M `strategy7m_prefix_resampler` | prefix-masked latent resampler | [TODO] | [TODO] | [TODO] | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7m_prefix_resampler_nommE5_textquery_focus_4k/checkpoint-4000` | TODO |
-
-### Current Known Comparison
-
-| Experiment | ViDoRe-v1 `ndcg@5` | ViDoRe-v2 `ndcg@5` | MMEB `recall@1` |
-|---|---:|---:|---:|
-| MRL main | 0.8981 | 0.6099 | 0.7580 |
-| Strategy 1 `strategy1_softassign` | 0.8119 | 0.4737 | 0.7210 |
-| Delta (`strategy1` - MRL) | -0.0862 | -0.1362 | -0.0370 |
-
-## Smoke Validation 2026-05-22
-
-Scope: strategies 3/4/5/6/3S/4S/7/7M. Strategies 1/2 are skipped here because their 8-GPU formal train/eval is already complete.
-
-Smoke setup:
-
-Smoke validation results are retained here for audit. The temporary smoke scripts and smoke run artifacts have since been removed; shared formal launchers remain in `experiments/exp_stagecompress/run_train.sh` and `experiments/exp_stagecompress/eval_3sets.sh`.
-
-- training: 2 GPUs, `MAX_STEPS=30`, `SAVE_STEPS=30`, budgets `160 320 640`, `COMPRESS_STAGES=all`
-- eval: smoke mode on three representative subsets: `syntheticDocQA_energy`, `esg_reports_human_labeled_v2`, `MMEB-eval-VisDial-beir`
-- smoke eval limits: `SMOKE_EVAL_MAX_QUERIES=16`, `SMOKE_EVAL_MAX_CORPUS=64`
-- pass criteria: shape validation succeeds, checkpoint-30 exists, `stage_compressor.pt` exists, loss is finite/non-zero where applicable, and all three smoke eval JSON files are written
-
-| Method | Shape | Train 30/30 | Loss @10 / @20 / @30 | Smoke eval files | Status |
-|---|---|---|---|---|---|
-| `strategy3_prumerge` | OK | OK | 5.0240 / 3.8643 / 3.6283 | v1/v2/mmeb OK | pass |
-| `strategy4_visionzip` | OK | OK | 5.1453 / 3.9322 / 3.6305 | v1/v2/mmeb OK | pass |
-| `strategy5_folder` | OK | OK | 5.1937 / 4.2741 / 3.9303 | v1/v2/mmeb OK | pass |
-| `strategy6_scope` | OK | OK | 5.0843 / 4.0006 / 3.6058 | v1/v2/mmeb OK | pass |
-| `strategy3s_scopeprumerge` | OK | OK | 5.0164 / 4.0653 / 3.6978 | v1/v2/mmeb OK | pass after NaN fix |
-| `strategy4s_scopevisionzip` | OK | OK | 5.0821 / 3.9720 / 3.5426 | v1/v2/mmeb OK | pass |
-| `strategy7_stage_resampler` | OK | OK | 6.2320 / 4.5938 / 4.0045 | v1/v2/mmeb OK | pass |
-| `strategy7m_prefix_resampler` | OK | OK | 5.6848 / 4.6908 / 4.0392 | v1/v2/mmeb OK | pass after dtype/mask fix |
-
-Smoke metric snapshot, for sanity only because the eval subset is tiny:
-
-| Method | v1 `ndcg@5` | v2 `ndcg@5` | MMEB recall metric |
-|---|---:|---:|---:|
-| `strategy3_prumerge` | 0.27455 | 0.23367 | r@5 0.5625 |
-| `strategy4_visionzip` | 0.51985 | 0.38071 | r@5 0.5000 |
-| `strategy5_folder` | 0.55580 | 0.36638 | r@5 0.5000 |
-| `strategy6_scope` | 0.58668 | 0.39961 | r@5 0.6250 |
-| `strategy3s_scopeprumerge` | 0.40414 | 0.31138 | r@1 0.1875 |
-| `strategy4s_scopevisionzip` | 0.40736 | 0.38012 | r@5 0.6250 |
-| `strategy7_stage_resampler` | 0.57179 | 0.11674 | r@5 0.6875 |
-| `strategy7m_prefix_resampler` | 0.33346 | 0.12328 | r@5 0.4375 |
-
-Artifacts:
-
-- smoke run directories/checkpoints/eval JSON were temporary validation artifacts and were removed after this audit.
-- retained run artifacts under `experiments/exp_stagecompress/runs/` are the full 8-GPU `_4k` runs.
-
-Fixes made during smoke:
-
-- `eval_3sets.sh`: fixed multi-call syntax so smoke eval runs v1, v2, and mmeb instead of stopping after the first dataset; default formal eval is 8 GPU, smoke wrappers override to 2 GPU.
-- `eval_stagecompress.py`: added smoke query/corpus limits and materializes selected datasets to avoid HuggingFace `flatten_indices` cache races in multi-process smoke eval.
-- `run_train.sh`: defaults `DDP_FIND_UNUSED_PARAMETERS=1`, required by branchy compression modules such as VisionZip and hard-selection methods; default `MODEL_PATH` points at the project-local `models/colqwen2.5-base` but can still be overridden.
-- `strategy3s_scopeprumerge`: fixed NaN loss by using SCOPE only for keep-token selection while keeping finite saliency values for PruMerge residual/merge softmax.
-- `strategy7m_prefix_resampler`: fixed bf16/float dtype mismatch in prefix resampler and aligned loss masks to actual embedding lengths after padding/gather.
-- smoke eval defaults to `SMOKE_EVAL_NUM_WORKERS=0` to reduce non-model multiprocessing cleanup/cache noise; formal full eval keeps `NUM_WORKERS=4` by default.
-
-Formal 8-GPU commands:
-
-```bash
-cd /MURE-V2/code/MetaEmbed/colqwen_multigranularity
-
-# Train one method on 8 GPUs.
-METHOD=strategy3_prumerge \
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 \
-MAX_STEPS=4000 SAVE_STEPS=500 \
-BUDGETS="160 320 640" COMPRESS_STAGES=all \
-bash experiments/exp_stagecompress/run_train.sh
-
-# Evaluate the 8-GPU checkpoint on the full configured eval sets.
-METHOD=strategy3_prumerge \
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 \
-EVAL_MODE=full \
-bash experiments/exp_stagecompress/eval_3sets.sh \
-  experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3_prumerge_nommE5_textquery_focus_4k/checkpoint-4000
+```text
+image / g1,g2,g3 crops
+  -> Vision Encoder
+  -> Adapter / Merger / Visual Projection
+  -> LLM
+  -> custom_text_proj / MLP
+  -> retrieval embeddings
 ```
 
-Replace `METHOD` with any remaining smoke-passed method:
+## Current Result Table
 
-- `strategy3_prumerge`
-- `strategy4_visionzip`
-- `strategy5_folder`
-- `strategy6_scope`
-- `strategy3s_scopeprumerge`
-- `strategy4s_scopevisionzip`
-- `strategy7_stage_resampler`
-- `strategy7m_prefix_resampler`
+The table below is the current consolidated result table used for plotting.
+Metrics are reported as percentages: ViDoRe-v1/v2 use `avg_ndcg@5`, and MMEB
+uses the tracked recall metric for that run.
 
-## Method Differences
+| Strategy | Type | Position | ViDoReV1 | ViDoReV2 | MMEB | Status |
+|---|---|---|---:|---:|---:|---|
+| MRL_main Baseline | 无压缩 | / | 89.8 | 61.0 | 75.8 | reference |
+| MetaEmbed | 无压缩 | LLM前 | 83.1 | 52.9 | 73.6 | reference |
+| strategy1_softassign | 合并 | MLP后 | 81.2 | 47.4 | 72.1 | done |
+| strategy3_prumerge | 剪枝+合并 | MLP后 | 87.9 | 58.3 | 75.3 | done |
+| strategy4_visionzip | 剪枝+合并 | MLP后 | 87.7 | 57.8 | 73.3 | done |
+| strategy5_folder | 合并 | MLP后 | 89.6 | 58.8 | 75.1 | done |
+| strategy6_scope | 剪枝 | MLP后 | 88.6 | 57.2 | 75.1 | done |
+| strategy7_stage_resampler | 可学习token | MLP后 | 80.8 | 45.0 | 70.1 | done |
+| Learnable Global MRL Tokens | 可学习token | LLM前 | 78.0 | 46.1 | 70.6 | done |
+| Learnable Global MRL Tokens + TwigStage | 可学习token+剪枝 | LLM浅层 | 81.6 | 49.6 | 69.1 | historical mixed method |
+| SoftStageMRL | 剪枝 | LLM前 | 74.3 | 43.4 | 68.1 | done |
+| VisionZipMRL LLM-Early | 剪枝+合并 | LLM浅层 | TODO | TODO | TODO | smoke passed; formal 8-GPU pending |
+| VisionZipMRL Adapter-Pre | 剪枝+合并 | LLM前 | TODO | TODO | TODO | smoke passed; formal 8-GPU pending |
+| TwigMRL | 剪枝 | LLM浅层 | TODO | TODO | TODO | TwigVLM-style branch smoke passed; formal 8-GPU pending |
+| VisionSelectorMRL | 剪枝 | LLM前 | TODO | TODO | TODO | VisionSelector-style scorer+TopK+BCE constraint smoke passed; formal 8-GPU pending |
 
-### Shared Setup
+Notes:
 
-All compression strategies in this branch:
+- `Learnable Global MRL Tokens + TwigStage` is marked as a historical mixed
+  method because it combines learnable MRL tokens and Twig-style pruning. It is
+  not part of the current pure MRL_main visual-token compression direction.
+- The current pure MLPPRE methods still pending formal 8-GPU train/eval are
+  `VisionZipMRL LLM-Early`, `VisionZipMRL Adapter-Pre`, and `TwigMRL`.
 
-- operate inside `exp_stagecompress`
-- keep the same processor / trainer / loss stack
-- keep the same three-stage MRL structure
-- use the same default stage budgets `160 / 320 / 640`
-- use the same training subset config `configs/train/moca_data_ratios_v3_nommE5.yaml`
+## Position Definitions
 
-### High-Level Difference Table
+| Position | Stage | Meaning |
+|---|---|---|
+| LLM 前 | Adapter 后 / LLM 前 | Select or compress visual tokens after Qwen visual encoder/adapter/merger, before LLM. |
+| LLM 浅层 | LLM early layers | Run shallow LLM layers first, then prune/select/merge visual tokens, then continue remaining LLM layers. |
+| LLM 输入组织 | LLM input/output representation | Add learnable tokens or change the final representation without necessarily reducing visual tokens. |
+| MLP 后 | After `custom_text_proj` | Compress already projected retrieval embeddings. |
 
-| Strategy | Compression Style | Core Operation | Keeps Raw Important Tokens? | Context / Residual Handling | Main Intuition |
-|---|---|---|---|---|---|
-| Strategy 1 | soft clustering | token -> prototype soft assignment | no | all tokens absorbed into prototypes | compact latent clustering |
-| Strategy 2 | soft pooling | latent queries read from all tokens | no | all tokens contribute through pooling | compact latent summarization |
-| Strategy 3 | keep + merge + residual | keep salient tokens, merge remainder, add residual token | yes | merge branch + residual summary | preserve evidence before summarizing |
-| Strategy 4 | dominant + contextual | keep dominant tokens, build contextual tokens from remaining regions | yes | contextual branch absorbs residual information | preserve salient evidence and broad coverage |
-| Strategy 5 | pairwise merge | bipartite token-to-token merging using redundancy vs importance | partially | size-aware merge into matched tokens | collapse redundancy directly |
-| Strategy 6 | coverage-aware selection | greedy token subset selection using saliency + coverage gain | yes | no residual branch in base form | preserve semantic completeness while pruning |
-| Strategy 4S | hybrid selection + contextual compression | SCOPE selection inside VisionZip-style dominant/contextual split | yes | contextual branch remains | improve coverage-aware dominant/contextual selection |
-| Strategy 3S | hybrid selection + merge | SCOPE selection for keep tokens before prumerge merge/residual steps | yes | merge + residual remain | improve keep-token quality before merge |
-| Strategy 7 | latent resampler | learnable stage-specific latent tokens summarize each stage | yes via latent state | no explicit residual in base form | model-internal learned compression |
-| Strategy 7M | prefix-masked latent resampler | stage-specific latent tokens with cumulative prefix visibility | yes via latent state | no explicit residual in base form | closer to MRL-style prefix accumulation |
+## MLP 之前压缩
 
-## Strategy 1: `strategy1_softassign`
+This is the active research section. The strict code rule is:
 
-### Idea
+- **可学习token**: only methods that append learnable query/doc MRL tokens and
+  use those token hidden states as retrieval embeddings.
+- **剪枝**: methods that remove/select visual tokens without adding learnable
+  retrieval tokens.
+- **合并**: methods that merge redundant visual tokens into kept tokens without
+  adding learnable retrieval tokens.
 
-Compress each stage by assigning all tokens to a small set of learned prototype slots.
+For MRL_main-based visual-token compression, the model must keep the original
+MRL_main output protocol: token embeddings from the model are trained with
+`MRLInBatchNegativeLoss` using g1/g2/g3 masks from the original `input_ids`.
+It must not use `prompt_embed_tokens`, `GlobalMRLTokenInBatchNegativeLoss`, or
+`global_mrl_tokens.pt`.
 
-### Core Mechanism
+Granularity rule:
 
-1. Enhance stage tokens with a lightweight MHA + MLP block.
-2. Score tokens with a trainable saliency head.
-3. Compute token-to-prototype similarity.
-4. Add saliency bias to assignment logits.
-5. Soft-aggregate all tokens into `budget` prototype tokens.
+- g1 has 1 crop: compress this crop independently.
+- g2 has 2 crops: split into 2 crop blocks, compress each crop independently,
+  then concatenate.
+- g3 has 4 crops: split into 4 crop blocks, compress each crop independently,
+  then concatenate.
+- Do not merge across g3 crops unless that is explicitly the experiment.
 
-### Why it matters
+### Active MLPPRE Inventory
 
-- simple and stable
-- fully differentiable
-- good first compression baseline
+| Family / Variant | Code Path | Type | Position | Code Status | Smoke / Eval Status | TODO |
+|---|---|---|---|---|---|---|
+| Learnable Global MRL Tokens | `llmpre/learnable_tokens/` | 可学习token | LLM 输入组织 | Uses appended `prompt_embed_tokens` and Global-MRL-token loss by design | smoke/probes passed; 8-GPU 4k checkpoints exist | Reference baseline only; not visual-token compression |
+| TwigMRL Mask | `llmpre/twigmrl/` | 剪枝 | LLM 浅层 | Pure MRL_main; TwigVLM-style Qwen decoder branch, default K=2/T=3, initialized from backbone layers [2,5); no learnable Global MRL tokens | 2-step 2-GPU smoke passed with frozen-base train scope | TODO: formal 8-GPU train/eval |
+| TwigMRL Prune Eval | `llmpre/twigmrl/` | 剪枝 | LLM 浅层 | Same model as TwigMRL Mask; final twig-layer attention scores visual tokens; hard prune only in eval/inference | tiny 3-set eval passed after TwigVLM-style refactor | TODO: formal 8-GPU train/eval |
+| VisionZipMRL LLM-Early | `llmpre/visionzip_mrl/` | 剪枝+合并 | LLM 浅层 | Pure MRL_main; saves `visionzip_mrl_selector.pt`; no `global_mrl_tokens.pt` | 4-step 2-GPU smoke passed; tiny 3-set eval passed with real prune | TODO: formal 8-GPU train/eval |
+| VisionZipMRL Adapter-Pre | `llmpre/visionzip_mrl/` | 剪枝+合并 | LLM 前 | Same pure MRL_main implementation; compression before any LLM layer | 4-step 2-GPU smoke passed; tiny 3-set eval passed with real prune | TODO: formal 8-GPU train/eval |
+| VisionSelectorMRL | `llmpre/visionselector_mrl/` | 剪枝 | LLM前 | Pure MRL_main; VisionSelector TransformerScorer + differentiable TopK + hard-topk BCE constraint loss; trains selector + randomly initialized `custom_text_proj`; saves `visionselector_mrl_selector.pt` plus PEFT `custom_text_proj`; no `global_mrl_tokens.pt` | 2-step 2-GPU smoke passed with constraint loss; tiny 3-set prune eval passed; training scope corrected afterward to include `custom_text_proj` | TODO: formal 8-GPU train/eval |
+| SoftStageMRL | `llmpre/softstage/` | 剪枝 | LLM 前 | Pure MRL_main; stage-wise soft visual-token mask; saves `softstage_selector.pt`; no `global_mrl_tokens.pt` | 2-step 2-GPU smoke passed; tiny 3-set eval passed | TODO: optional formal 8-GPU train/eval if selected |
 
-### Current Best Known Entry
+### MLPPRE Smoke Status
 
-| Item | Value |
-|---|---|
-| Method | `strategy1_softassign` |
-| Best known status | available |
-| Known result | ViDoRe-v1 `0.8119`, ViDoRe-v2 `0.4737`, MMEB `0.7210` |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy1_softassign_nommE5_textquery_focus_4k/checkpoint-4000` |
+Smoke artifact directories and logs have been cleaned after verification. The
+records below only keep the conclusion that each code path passed 2-GPU smoke
+training and tiny evaluation; they are not artifact paths.
 
-### Iteration Table
-
-| Version | Change | Motivation | Status |
+| Code Path / Variant | Type | Position | Smoke Status |
 |---|---|---|---|
-| v1 | all-token soft assignment | establish trainable baseline | implemented |
-| v2 | current all-stage default budgets `160/320/640` | fair comparison under equal-ratio style compression | implemented |
-| v3 | final report refresh | fill complete ViDoRe/MMEB tables | [TODO] |
+| `llmpre/visionzip_mrl/` LLM-Early | 剪枝+合并 | LLM 浅层 | 4-step 2-GPU smoke training passed; tiny 3-set eval passed; verified no `global_mrl_tokens.pt`. |
+| `llmpre/visionzip_mrl/` Adapter-Pre | 剪枝+合并 | LLM 前 | 4-step 2-GPU smoke training passed; tiny 3-set eval passed; verified no `global_mrl_tokens.pt`. |
+| `llmpre/twigmrl/` Mask train + Prune eval | 剪枝 | LLM 浅层 | 2-step 2-GPU smoke training passed with TwigVLM-style branch; tiny 3-set eval passed; verified `MRLInBatchNegativeLoss`, `score_source=twig_layers_attention`, `init_from_backbone=true`, and no `global_mrl_tokens.pt`. |
+| `llmpre/softstage/` legacy path | 剪枝 | LLM 前 | 2-step 2-GPU smoke training passed; tiny 3-set eval passed after pure MRL_main refactor. |
+| `llmpre/visionzip/` legacy path | 剪枝+合并 | LLM 浅层 | 2-step 2-GPU smoke training passed; tiny 3-set eval passed after forwarding to `visionzip_mrl/`. |
+| `llmpre/twigstage/` legacy path | 剪枝 | LLM 浅层 | 2-step 2-GPU smoke training passed; tiny 3-set eval passed after forwarding to `twigmrl/`. |
 
-## Strategy 2: `strategy2_softpool`
+These tiny evaluations are smoke checks only and are not comparable to full
+formal evaluation results.
 
-### Idea
+### Legacy MRL_main Compatibility Paths
 
-Compress each stage by reading all tokens with a small set of learned latent query vectors.
+These directories used to contain the mixed Global-MRL-token implementations. They have now been refactored into pure MRL_main compatibility paths; canonical new experiments should still prefer `twigmrl/` and `visionzip_mrl/` where applicable.
 
-### Core Mechanism
-
-1. Enhance stage tokens.
-2. Score tokens with the same saliency head.
-3. Use learned latent queries to attend to all stage tokens.
-4. Pool them into `budget` compressed tokens.
-
-### Why it matters
-
-- simple latent summarization baseline
-- contrasts directly with prototype assignment
-- useful to test whether query-style pooling is better than clustering
-
-### Current Best Known Entry
-
-| Item | Value |
+| Path | Current Status |
 |---|---|
-| Method | `strategy2_softpool` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy2_softpool_nommE5_textquery_focus_4k/checkpoint-4000` |
+| `llmpre/softstage/` | Reworked to pure MRL_main SoftStage: LLM-pre soft mask, saves only `softstage_selector.pt`; no learnable Global MRL tokens. |
+| `llmpre/twigstage/` | Legacy path now forwards to pure MRL_main `llmpre/twigmrl/`; no learnable Global MRL tokens. |
+| `llmpre/visionzip/` | Legacy path now forwards to pure MRL_main `llmpre/visionzip_mrl/`; no learnable Global MRL tokens. |
 
-### Iteration Table
+## MLP 之后压缩
 
-| Version | Change | Motivation | Status |
-|---|---|---|---|
-| v1 | all-token latent pooling | direct comparison to soft assignment | implemented |
-| v2 | all-stage default budgets `160/320/640` | match main comparison setup | implemented |
-| v3 | formal run and full eval refresh | paper-facing comparison | [TODO] |
+This section is archived. These methods all operate after `custom_text_proj` /
+MLP. They are kept for reference, but they are not the main direction now.
 
-## Strategy 3: `strategy3_prumerge`
-
-### Idea
-
-Keep the most salient tokens first, then merge the remaining tokens back into the kept tokens and a residual summary branch.
-
-### Core Mechanism
-
-1. Score all tokens.
-2. Select `keep` tokens.
-3. Merge residual tokens into kept tokens.
-4. Use merge slots for remaining structure.
-5. Add one residual/global summary token.
-
-### Why it matters
-
-- more structured than full soft clustering
-- preserves local evidence better
-- explicit residual pathway
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy3_prumerge` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3_prumerge_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-### Iteration Table
-
-| Version | Change | Motivation | Status |
-|---|---|---|---|
-| v1 | keep + merge + residual | structure-preserving compression | implemented |
-| v2 | all-stage integration into shared train/eval path | keep fair comparison against strategies 1/2 | implemented |
-| v3 | formal run and eval refresh | quantify real gain over strategy 1/2 | [TODO] |
-
-## Strategy 4: `strategy4_visionzip`
-
-### Idea
-
-Split the compressed stage into dominant tokens and contextual tokens, following the VisionZip intuition while adapting it to stage-wise MRL.
-
-### Core Mechanism
-
-1. Score stage tokens by saliency.
-2. Keep dominant tokens with highest saliency.
-3. Sample contextual anchors from the residual set.
-4. Merge remaining residual tokens into contextual anchors.
-5. Output `dominant + contextual` compact sequence.
-
-### Why it matters
-
-- explicitly separates salient evidence from broader context
-- captures both importance and coverage
-- closer to document-layout reasoning than pure pooling
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy4_visionzip` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4_visionzip_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-### Iteration Table
-
-| Version | Change | Motivation | Status |
-|---|---|---|---|
-| v1 | dominant + contextual basic version | import VisionZip idea into stage-wise MRL | implemented |
-| v2 | integrate contextual merge into residual set | improve coverage without losing saliency | implemented |
-| v3 | formal run and eval refresh | compare against strategy3 and strategy5 | [TODO] |
-
-## Strategy 5: `strategy5_folder`
-
-### Idea
-
-Merge redundant tokens directly into matched neighbors using a Folder-style bipartite matching rule.
-
-### Core Mechanism
-
-1. Use enhanced token features as matching metrics.
-2. Build pairwise bipartite matching between alternating token groups.
-3. Score matches by redundancy minus importance.
-4. Merge selected source tokens into destination tokens.
-5. Keep size-aware scaling for merged representations.
-
-### Why it matters
-
-- directly targets redundancy instead of latent summarization
-- preserves more token identity than full pooling
-- introduces size-aware token merge behavior
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy5_folder` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy5_folder_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-### Iteration Table
-
-| Version | Change | Motivation | Status |
-|---|---|---|---|
-| v1 | Folder-style pairwise merge | import redundancy-collapse idea into stage-wise MRL | implemented |
-| v2 | size-aware rescaling inside stage compression block | keep merged token magnitude interpretable | implemented |
-| v3 | formal run and eval refresh | compare against VisionZip and PruMerge variants | [TODO] |
-
-## Strategy 6: `strategy6_scope`
-
-### Idea
-
-Select a compact token subset by jointly maximizing saliency and semantic coverage.
-
-### Core Mechanism
-
-1. Compute token-token similarity on enhanced stage features.
-2. Maintain the current coverage of the selected set.
-3. Iteratively choose the token with the largest saliency-coverage gain.
-4. Return the selected token subset as the compressed representation.
-
-### Why it matters
-
-- directly targets semantic completeness under pruning
-- more principled than pure saliency top-k
-- forms a clean pruning baseline distinct from pooling and merge families
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy6_scope` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy6_scope_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-### Iteration Table
-
-| Version | Change | Motivation | Status |
-|---|---|---|---|
-| v1 | standalone saliency-coverage greedy selection | establish SCOPE-style pruning baseline | implemented |
-| v2 | formal run and eval refresh | compare against strategies 4 and 5 | [TODO] |
-
-## Strategy 4S: `strategy4s_scopevisionzip`
-
-### Idea
-
-Use SCOPE instead of plain saliency for selecting dominant and contextual subsets inside the VisionZip-style branch.
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy4s_scopevisionzip` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4s_scopevisionzip_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-## Strategy 3S: `strategy3s_scopeprumerge`
-
-### Idea
-
-Use SCOPE to choose the keep subset before the PruMerge merge/residual stage.
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy3s_scopeprumerge` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3s_scopeprumerge_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-## Strategy 7: `strategy7_stage_resampler`
-
-### Idea
-
-Append learnable stage-specific latent tokens that only summarize their corresponding stage and use them as compressed stage outputs.
-
-### Core Mechanism
-
-1. Initialize a fixed set of learnable latent tokens per stage.
-2. Let these latents cross-attend only to the stage tokens.
-3. Refine the latents with self-attention and an MLP.
-4. Use the final latent tokens as the compressed stage representation.
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy7_stage_resampler` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7_stage_resampler_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-## Strategy 7M: `strategy7m_prefix_resampler`
-
-### Idea
-
-Use stage-specific latent tokens with explicit prefix visibility: `L1` sees `text+G1`, `L2` sees `text+G1+G2`, and `L3` sees `text+G1+G2+G3`.
-
-### Current Best Known Entry
-
-| Item | Value |
-|---|---|
-| Method | `strategy7m_prefix_resampler` |
-| Best known status | TODO |
-| Known result | [TODO] |
-| Checkpoint | `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7m_prefix_resampler_nommE5_textquery_focus_4k/checkpoint-4000` |
-
-## Training Plan
-
-### Paper-Facing Mainline
-
-| Priority | Tag | Method | Purpose | Status |
+| Method | Code Path / Strategy | Position | Formal Result / Smoke Result | Status |
 |---|---|---|---|---|
-| 1 | `all_strategy1_softassign` | `strategy1_softassign` | trainable soft assignment baseline | available |
-| 2 | `all_strategy2_softpool` | `strategy2_softpool` | latent pooling comparison | [TODO] |
-| 3 | `all_strategy3_prumerge` | `strategy3_prumerge` | keep + merge + residual comparison | [TODO] |
-| 4 | `all_strategy4_visionzip` | `strategy4_visionzip` | dominant + contextual comparison | [TODO] |
-| 5 | `all_strategy5_folder` | `strategy5_folder` | Folder-style pairwise merge comparison | [TODO] |
-| 6 | `all_strategy6_scope` | `strategy6_scope` | SCOPE-style saliency-coverage pruning comparison | [TODO] |
-| 7 | `all_strategy4s_scopevisionzip` | `strategy4s_scopevisionzip` | SCOPE-enhanced VisionZip comparison | [TODO] |
-| 8 | `all_strategy3s_scopeprumerge` | `strategy3s_scopeprumerge` | SCOPE-enhanced PruMerge comparison | [TODO] |
-| 9 | `all_strategy7_stage_resampler` | `strategy7_stage_resampler` | learnable stage-resampler comparison | [TODO] |
-| 10 | `all_strategy7m_prefix_resampler` | `strategy7m_prefix_resampler` | prefix-mask stage resampler comparison | [TODO] |
-
-### Optional Ablations
-
-| Tag | Method | Stages | Status |
-|---|---|---|---|
-| `baseline_strategy1_softassign` | `strategy1_softassign` | none | [TODO] |
-| `g2g3_strategy1_softassign` | `strategy1_softassign` | g2g3 | [TODO] |
-| `g3_strategy1_softassign` | `strategy1_softassign` | g3 | [TODO] |
-| `g2g3_strategy2_softpool` | `strategy2_softpool` | g2g3 | [TODO] |
-| `g3_strategy2_softpool` | `strategy2_softpool` | g3 | [TODO] |
-| `g3_strategy5_folder` | `strategy5_folder` | g3 | [TODO] |
-| `g3_strategy6_scope` | `strategy6_scope` | g3 | [TODO] |
-| `g3_strategy4s_scopevisionzip` | `strategy4s_scopevisionzip` | g3 | [TODO] |
-| `g3_strategy3s_scopeprumerge` | `strategy3s_scopeprumerge` | g3 | [TODO] |
-| `g3_strategy7_stage_resampler` | `strategy7_stage_resampler` | g3 | [TODO] |
-| `g3_strategy7m_prefix_resampler` | `strategy7m_prefix_resampler` | g3 | [TODO] |
-
-## 8 GPU Launch Commands
-
-Run the commands from the repo root. The method IDs here are the canonical `exp_stagecompress` IDs: Strategy 2 is `strategy2_softpool`, Strategy 3 is `strategy3_prumerge`, and VisionZip is `strategy4_visionzip`.
-
-Common settings:
-
-- Training data: `configs/train/moca_data_ratios_v3_nommE5.yaml`
-- Evaluation data: `configs/eval/test_data_vidore_v1_v2_mmeb_textquery_focus.yaml`
-- Main compression setup: `COMPRESS_STAGES=all`, `BUDGETS="160 320 640"`
-- Output directory: `experiments/exp_stagecompress/runs/stagecompress_8gpu_all_${METHOD}_nommE5_textquery_focus_4k`
-- Use `MAIN_PROCESS_PORT=0` to avoid stale `29500` port collisions.
-- Keep `DDP_FIND_UNUSED_PARAMETERS=1` for these compression runs; some compression branches can be inactive on a batch.
-
-Evaluation modes:
-
-- Smoke validation: `EVAL_MODE=smoke`, two GPUs, one representative dataset per group, capped by `EVAL_MAX_QUERIES` / `EVAL_MAX_CORPUS`.
-- Full 3-set evaluation: `EVAL_MODE=full`, eight GPUs, all focused ViDoRe-v1, ViDoRe-v2, and MMEB text-query datasets. ViDoRe uses `avg_ndcg_at_5`; MMEB uses `avg_recall_at_1` to match the master table.
-
-### Strategy 1: `all + strategy1_softassign`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy1_softassign BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy1_softassign BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy1_softassign_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy1_softassign BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy1_softassign_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 2: `all + strategy2_softpool`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy2_softpool BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy2_softpool BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy2_softpool_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy2_softpool BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy2_softpool_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 3: `all + strategy3_prumerge`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy3_prumerge BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy3_prumerge BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3_prumerge_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy3_prumerge BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3_prumerge_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 4: `all + strategy4_visionzip`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy4_visionzip BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy4_visionzip BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4_visionzip_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy4_visionzip BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4_visionzip_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 5: `all + strategy5_folder`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy5_folder BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy5_folder BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy5_folder_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy5_folder BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy5_folder_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 6: `all + strategy6_scope`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy6_scope BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy6_scope BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy6_scope_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy6_scope BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy6_scope_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 4S: `all + strategy4s_scopevisionzip`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy4s_scopevisionzip BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy4s_scopevisionzip BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4s_scopevisionzip_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy4s_scopevisionzip BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy4s_scopevisionzip_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 3S: `all + strategy3s_scopeprumerge`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy3s_scopeprumerge BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy3s_scopeprumerge BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3s_scopeprumerge_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy3s_scopeprumerge BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy3s_scopeprumerge_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 7: `all + strategy7_stage_resampler`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy7_stage_resampler BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy7_stage_resampler BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7_stage_resampler_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy7_stage_resampler BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7_stage_resampler_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-### Strategy 7M: `all + strategy7m_prefix_resampler`
-
-8 GPU training:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 MAX_STEPS=4000 SAVE_STEPS=500 USE_PEFT=1 DDP_FIND_UNUSED_PARAMETERS=1 COMPRESS_STAGES=all METHOD=strategy7m_prefix_resampler BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/run_train.sh
-```
-
-2 GPU smoke validation after `checkpoint-4000` exists:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 MAIN_PROCESS_PORT=0 EVAL_MODE=smoke COMPRESS_STAGES=all METHOD=strategy7m_prefix_resampler BUDGETS="160 320 640" bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7m_prefix_resampler_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-8 GPU full 3-set evaluation for the result tables:
-
-```bash
-cd /MURE-V2/code/MetaEmbed
-CUDA_DEVICE_LIST=0,1,2,3,4,5,6,7 NUM_GPUS=8 MAIN_PROCESS_PORT=0 EVAL_MODE=full COMPRESS_STAGES=all METHOD=strategy7m_prefix_resampler BUDGETS="160 320 640" BEIR_AVG_METRIC=ndcg_at_5 MMEB_AVG_METRIC=recall_at_1 bash colqwen_multigranularity/experiments/exp_stagecompress/eval_3sets.sh colqwen_multigranularity/experiments/exp_stagecompress/runs/stagecompress_8gpu_all_strategy7m_prefix_resampler_nommE5_textquery_focus_4k/checkpoint-4000
-```
-
-
-## Results Tables
-
-### ViDoRe-v1
-
-| Strategy | Method | Metric | Result |
-|---|---|---|---|
-| Strategy 1 | `strategy1_softassign` | avg_ndcg_at_5 | [TODO] |
-| Strategy 2 | `strategy2_softpool` | avg_ndcg_at_5 | [TODO] |
-| Strategy 3 | `strategy3_prumerge` | avg_ndcg_at_5 | [TODO] |
-| Strategy 4 | `strategy4_visionzip` | avg_ndcg_at_5 | [TODO] |
-| Strategy 5 | `strategy5_folder` | avg_ndcg_at_5 | [TODO] |
-| Strategy 6 | `strategy6_scope` | avg_ndcg_at_5 | [TODO] |
-| Strategy 4S | `strategy4s_scopevisionzip` | avg_ndcg_at_5 | [TODO] |
-| Strategy 3S | `strategy3s_scopeprumerge` | avg_ndcg_at_5 | [TODO] |
-| Strategy 7 | `strategy7_stage_resampler` | avg_ndcg_at_5 | [TODO] |
-| Strategy 7M | `strategy7m_prefix_resampler` | avg_ndcg_at_5 | [TODO] |
-
-### ViDoRe-v2
-
-| Strategy | Method | Metric | Result |
-|---|---|---|---|
-| Strategy 1 | `strategy1_softassign` | avg_ndcg_at_5 | [TODO] |
-| Strategy 2 | `strategy2_softpool` | avg_ndcg_at_5 | [TODO] |
-| Strategy 3 | `strategy3_prumerge` | avg_ndcg_at_5 | [TODO] |
-| Strategy 4 | `strategy4_visionzip` | avg_ndcg_at_5 | [TODO] |
-| Strategy 5 | `strategy5_folder` | avg_ndcg_at_5 | [TODO] |
-| Strategy 6 | `strategy6_scope` | avg_ndcg_at_5 | [TODO] |
-| Strategy 4S | `strategy4s_scopevisionzip` | avg_ndcg_at_5 | [TODO] |
-| Strategy 3S | `strategy3s_scopeprumerge` | avg_ndcg_at_5 | [TODO] |
-| Strategy 7 | `strategy7_stage_resampler` | avg_ndcg_at_5 | [TODO] |
-| Strategy 7M | `strategy7m_prefix_resampler` | avg_ndcg_at_5 | [TODO] |
-
-### MMEB
-
-| Strategy | Method | Metric | Result |
-|---|---|---|---|
-| Strategy 1 | `strategy1_softassign` | avg_recall_at_1 | [TODO] |
-| Strategy 2 | `strategy2_softpool` | avg_recall_at_1 | [TODO] |
-| Strategy 3 | `strategy3_prumerge` | avg_recall_at_1 | [TODO] |
-| Strategy 4 | `strategy4_visionzip` | avg_recall_at_1 | [TODO] |
-| Strategy 5 | `strategy5_folder` | avg_recall_at_1 | [TODO] |
-| Strategy 6 | `strategy6_scope` | avg_recall_at_1 | [TODO] |
-| Strategy 4S | `strategy4s_scopevisionzip` | avg_recall_at_1 | [TODO] |
-| Strategy 3S | `strategy3s_scopeprumerge` | avg_recall_at_1 | [TODO] |
-| Strategy 7 | `strategy7_stage_resampler` | avg_recall_at_1 | [TODO] |
-| Strategy 7M | `strategy7m_prefix_resampler` | avg_recall_at_1 | [TODO] |
-
-## TODO Board
-
-| Area | Item | Owner | Status |
-|---|---|---|---|
-| Results | refresh Strategy 1 full official table | [TODO] | [TODO] |
-| Results | run Strategy 2 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 3 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 4 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 5 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 6 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 4S formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 3S formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 7 formal train + eval | [TODO] | [TODO] |
-| Results | run Strategy 7M formal train + eval | [TODO] | [TODO] |
-| Ablation | optional partial-stage ablations | [TODO] | [TODO] |
-| Analysis | compare Strategy 3 vs Strategy 4 vs Strategy 5 | [TODO] | [TODO] |
-| Reporting | update master result table with best checkpoints | [TODO] | [TODO] |
+| Strategy 1 SoftAssign | `mlppost`, `strategy1_softassign` | MLP 后 | full 8-GPU train/eval done; ViDoRe-v1 `0.8119`, ViDoRe-v2 `0.4737`, MMEB `0.7210` | archived |
+| Strategy 2 SoftPool | `mlppost`, `strategy2_softpool` | MLP 后 | 8-GPU 4k training artifact was previously confirmed, but current project tree no longer contains its `checkpoint-4000/stage_compressor.pt` | archived |
+| Strategy 3 PruMerge | `mlppost`, `strategy3_prumerge` | MLP 后 | full result recorded by latest user eval; ViDoRe-v1 `0.879`, ViDoRe-v2 `0.583`, MMEB `0.753` | archived |
+| Strategy 4 VisionZip | `mlppost`, `strategy4_visionzip` | MLP 后 | full result recorded by latest user eval; ViDoRe-v1 `0.877`, ViDoRe-v2 `0.578`, MMEB `0.733` | archived |
+| Strategy 5 Folder | `mlppost`, `strategy5_folder` | MLP 后 | full result recorded by latest user eval; ViDoRe-v1 `0.896`, ViDoRe-v2 `0.588`, MMEB `0.751` | archived; best MLP-post ViDoRe-v1 |
+| Strategy 6 Scope | `mlppost`, `strategy6_scope` | MLP 后 | full result recorded by latest user eval; ViDoRe-v1 `0.886`, ViDoRe-v2 `0.572`, MMEB `0.751` | archived |
+| Strategy 7 Stage Resampler | `mlppost`, `strategy7_stage_resampler` | MLP 后 | full 8-GPU train/eval done; ViDoRe-v1 `0.808132`, ViDoRe-v2 `0.450357`, MMEB `0.707000` | archived |
+
+## Main TODO
+
+| Priority | Item | Reason |
+|---|---|---|
+| 1 | Launch formal 8-GPU train/eval for `VisionZipMRL LLM-Early` | pure MRL_main path; closest to strong MLP-post VisionZip idea; smoke passed |
+| 2 | Launch formal 8-GPU train/eval for `VisionZipMRL Adapter-Pre` | tests whether VisionZip-style compression works before any LLM layer; smoke passed |
+| 3 | Launch formal 8-GPU train/eval for `TwigMRL` | TwigVLM-style pure MRL_main branch refactor and 2-GPU smoke passed |
+| 4 | Launch formal 8-GPU train/eval for `VisionSelectorMRL` | reference VisionSelector-style scorer/TopK/constraint-loss port; smoke passed |
+| 5 | Keep direct train-time hard-prune disabled | stable route is differentiable mask/merge training plus prune eval/inference |
+
+## Detail Documents
+
+| Scope | Document |
+|---|---|
+| 8-GPU formal commands | `experiments/exp_stagecompress/FORMAL_8GPU_COMMANDS.md` |
+| LLM-pre overview | `experiments/exp_stagecompress/llmpre/README.md` |
+| Learnable-token smoke | `experiments/exp_stagecompress/llmpre/learnable_tokens/SMOKE_REPORT.md` |
+| VisionZipMRL implementation | `experiments/exp_stagecompress/llmpre/visionzip_mrl/README.md` |
+| VisionSelectorMRL implementation | `experiments/exp_stagecompress/llmpre/visionselector_mrl/README.md` |
+| MLP-post archive | `experiments/exp_stagecompress/mlppost/README.md` |

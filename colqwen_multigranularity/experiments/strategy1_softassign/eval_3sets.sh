@@ -38,8 +38,8 @@ NUM_GPUS=${NUM_GPUS:-1}
 MAIN_PROCESS_PORT=${MAIN_PROCESS_PORT:-0}
 MODEL_PATH=${MODEL_PATH:-$PROJECT_DIR/models/colqwen2.5-base}
 PROCESSOR_PATH=${PROCESSOR_PATH:-$MODEL_PATH}
-CHECKPOINT=${1:-${CHECKPOINT:-$PROJECT_DIR/runs/strategy1_softassign_full_4gpu_all_64-64-128_20260515_161253}}
-OUT_DIR=${OUT_DIR:-$PROJECT_DIR/runs/eval/strategy1_softassign_full_4gpu_all_64-64-128_20260515_161253}
+CHECKPOINT=${1:-${CHECKPOINT:-}}
+OUT_DIR=${OUT_DIR:-$PROJECT_DIR/runs/eval/strategy1_softassign_3sets}
 RUN_NAME=${RUN_NAME:-strategy1_softassign_eval_3sets_$(date +%Y%m%d_%H%M%S)}
 LOG_FILE=${LOG_FILE:-$PROJECT_DIR/runs/logs/${RUN_NAME}.log}
 EVAL_CKPTS=${EVAL_CKPTS:-}
@@ -56,6 +56,7 @@ V2_DO_PADDING=${V2_DO_PADDING:-1}
 INCLUDE_MULTILINGUAL=${INCLUDE_MULTILINGUAL:-0}
 SOFTASSIGN_BUDGETS=(${SOFTASSIGN_BUDGETS:-64 64 128})
 SOFTASSIGN_KEEP_RATIO=${SOFTASSIGN_KEEP_RATIO:-}
+SOFTASSIGN_KEEP_RATIOS=(${SOFTASSIGN_KEEP_RATIOS:-})
 SOFTASSIGN_STAGES=${SOFTASSIGN_STAGES:-all}
 SOFTASSIGN_TEMPERATURE=${SOFTASSIGN_TEMPERATURE:-0.1}
 
@@ -65,6 +66,14 @@ MMEB_CONFIG=${MMEB_CONFIG:-$PROJECT_DIR/configs/eval/test_data_mast_mmeb_v3.yaml
 
 if [[ "${#SOFTASSIGN_BUDGETS[@]}" -ne 3 ]]; then
   echo "SOFTASSIGN_BUDGETS must contain three integers, got: ${SOFTASSIGN_BUDGETS[*]}" >&2
+  exit 2
+fi
+if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 0 && "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 3 ]]; then
+  echo "SOFTASSIGN_KEEP_RATIOS must be empty or contain three floats, got: ${SOFTASSIGN_KEEP_RATIOS[*]}" >&2
+  exit 2
+fi
+if [[ -z "$CHECKPOINT" && -z "$EVAL_CKPTS" ]]; then
+  echo "Set CHECKPOINT, pass a checkpoint path as the first argument, or set EVAL_CKPTS." >&2
   exit 2
 fi
 
@@ -139,6 +148,9 @@ run_checkpoint() {
   if [[ -n "$SOFTASSIGN_KEEP_RATIO" ]]; then
     common_flags+=(--strategy1_softassign-keep-ratio "$SOFTASSIGN_KEEP_RATIO")
   fi
+  if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -eq 3 ]]; then
+    common_flags+=(--strategy1_softassign-keep-ratios "${SOFTASSIGN_KEEP_RATIOS[@]}")
+  fi
   if [[ "$USE_V2_RETRIEVER" == "1" || "$USE_V2_RETRIEVER" == "true" ]]; then
     common_flags+=(--use-v2-retriever)
   else
@@ -158,7 +170,7 @@ run_checkpoint() {
     echo "[strategy1_softassign_eval] strategy1_softassign_path=$strategy1_softassign_path"
     echo "[strategy1_softassign_eval] out_dir=$output_dir"
     echo "[strategy1_softassign_eval] cuda=$CUDA_DEVICE_LIST num_gpus=$NUM_GPUS batch_query=$BATCH_QUERY batch_passage=$BATCH_PASSAGE batch_score=$BATCH_SCORE"
-    echo "[strategy1_softassign_eval] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=${SOFTASSIGN_KEEP_RATIO:-from_config}"
+    echo "[strategy1_softassign_eval] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=${SOFTASSIGN_KEEP_RATIO:-from_config} keep_ratios=${SOFTASSIGN_KEEP_RATIOS[*]:-from_config}"
   } | tee -a "$LOG_FILE"
 
   run_eval vidore_v1 "$VIDORE_V1_CONFIG" beir "$output_dir/vidore_v1.json" "${common_flags[@]}"

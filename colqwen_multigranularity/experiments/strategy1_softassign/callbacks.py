@@ -8,14 +8,21 @@ from transformers import TrainerCallback, TrainerControl, TrainerState, Training
 
 class SoftAssignmentSaveCallback(TrainerCallback):
     def _find_strategy1_softassign(self, model: Any):
-        current = model
+        stack = [model]
         seen = set()
-        while current is not None and id(current) not in seen:
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in seen:
+                continue
             seen.add(id(current))
             module = getattr(current, "strategy1_softassign", None)
             if module is not None:
                 return module
-            current = getattr(current, "base_model", None)
+            stack.extend(
+                getattr(current, name, None)
+                for name in ("base_model", "model", "module")
+                if getattr(current, name, None) is not None
+            )
         return None
 
     def on_save(

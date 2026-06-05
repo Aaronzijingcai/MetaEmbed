@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--strategy1_softassign-compress-stages", type=str, default="all")
     parser.add_argument("--strategy1_softassign-budgets", type=int, nargs=3, default=[64, 64, 128])
     parser.add_argument("--strategy1_softassign-keep-ratio", type=float, default=None)
+    parser.add_argument("--strategy1_softassign-keep-ratios", type=float, nargs=3, default=None)
     parser.add_argument("--strategy1_softassign-temperature", type=float, default=0.1)
     parser.add_argument("--strategy1_softassign-learnable-temperature", action="store_true", default=False)
     parser.add_argument("--strategy1_softassign-no-normalize-inputs", action="store_true", default=False)
@@ -54,6 +55,7 @@ def build_strategy1_softassign_config(args: argparse.Namespace) -> SoftAssignmen
         enabled=bool(args.strategy1_softassign_enabled),
         budgets=coerce_budgets(args.strategy1_softassign_budgets),
         keep_ratio=args.strategy1_softassign_keep_ratio,
+        keep_ratios=None if args.strategy1_softassign_keep_ratios is None else tuple(float(value) for value in args.strategy1_softassign_keep_ratios),
         compress_stages=args.strategy1_softassign_compress_stages,
         temperature=float(args.strategy1_softassign_temperature),
         learnable_temperature=bool(args.strategy1_softassign_learnable_temperature),

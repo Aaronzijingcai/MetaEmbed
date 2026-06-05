@@ -12,10 +12,14 @@ from .compression import SoftAssignmentConfig
 def _compact_stage_lengths(original: torch.Tensor, config: SoftAssignmentConfig) -> torch.Tensor:
     budgets = torch.tensor(config.budgets, dtype=torch.long, device=original.device).unsqueeze(0)
     budget_cap = torch.minimum(budgets.expand_as(original), original)
-    if config.keep_ratio is None:
+    if config.keep_ratios is None and config.keep_ratio is None:
         return budget_cap
-    ratio = float(config.keep_ratio)
-    ratio_cap = torch.ceil(original.to(torch.float32) * ratio).to(torch.long).clamp_min(1)
+    ratios = (
+        torch.tensor(config.keep_ratios, dtype=torch.float32, device=original.device).unsqueeze(0)
+        if config.keep_ratios is not None
+        else torch.full((1, original.shape[-1]), float(config.keep_ratio), dtype=torch.float32, device=original.device)
+    )
+    ratio_cap = torch.ceil(original.to(torch.float32) * ratios).to(torch.long).clamp_min(1)
     ratio_cap = torch.where(original.gt(0), ratio_cap, torch.zeros_like(ratio_cap))
     return torch.minimum(budget_cap, ratio_cap)
 

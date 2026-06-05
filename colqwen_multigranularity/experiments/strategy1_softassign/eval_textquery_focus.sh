@@ -40,10 +40,9 @@ export MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
 export MASTER_PORT=${MASTER_PORT:-$MAIN_PROCESS_PORT}
 MODEL_PATH=${MODEL_PATH:-$PROJECT_DIR/models/colqwen2.5-base}
 PROCESSOR_PATH=${PROCESSOR_PATH:-$MODEL_PATH}
-CHECKPOINT=${1:-${CHECKPOINT:-$PROJECT_DIR/runs/strategy1_softassign_full_4gpu_all_kr0.25_512-1024-2048_20260518_205132/checkpoint-7000}}
+CHECKPOINT=${1:-${CHECKPOINT:-}}
 EVAL_CKPTS=${EVAL_CKPTS:-}
-EVAL_CONFIG=${EVAL_CONFIG:-$PROJECT_DIR/configs/eval/test_data_vidore_beir.yaml}
-MMEB_EVAL_CONFIG=${MMEB_EVAL_CONFIG:-$PROJECT_DIR/configs/eval/test_data_mast_mmeb_v3.yaml}
+FOCUS_EVAL_CONFIG=${FOCUS_EVAL_CONFIG:-$PROJECT_DIR/configs/eval/test_data_vidore_v1_v2_mmeb_textquery_focus.yaml}
 OUT_DIR=${OUT_DIR:-$PROJECT_DIR/runs/eval/textquery_focus}
 RUN_NAME=${RUN_NAME:-strategy1_softassign_eval_textquery_focus_$(date +%Y%m%d_%H%M%S)}
 LOG_FILE=${LOG_FILE:-$PROJECT_DIR/runs/logs/${RUN_NAME}.log}
@@ -59,6 +58,7 @@ USE_V2_RETRIEVER=${USE_V2_RETRIEVER:-1}
 V2_DO_PADDING=${V2_DO_PADDING:-1}
 SOFTASSIGN_BUDGETS=(${SOFTASSIGN_BUDGETS:-512 1024 2048})
 SOFTASSIGN_KEEP_RATIO=${SOFTASSIGN_KEEP_RATIO:-}
+SOFTASSIGN_KEEP_RATIOS=(${SOFTASSIGN_KEEP_RATIOS:-})
 SOFTASSIGN_STAGES=${SOFTASSIGN_STAGES:-all}
 SOFTASSIGN_TEMPERATURE=${SOFTASSIGN_TEMPERATURE:-0.1}
 
@@ -66,9 +66,99 @@ if [[ "${#SOFTASSIGN_BUDGETS[@]}" -ne 3 ]]; then
   echo "SOFTASSIGN_BUDGETS must contain three integers, got: ${SOFTASSIGN_BUDGETS[*]}" >&2
   exit 2
 fi
+if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 0 && "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 3 ]]; then
+  echo "SOFTASSIGN_KEEP_RATIOS must be empty or contain three floats, got: ${SOFTASSIGN_KEEP_RATIOS[*]}" >&2
+  exit 2
+fi
+if [[ -z "$CHECKPOINT" && -z "$EVAL_CKPTS" ]]; then
+  echo "Set CHECKPOINT, pass a checkpoint path as the first argument, or set EVAL_CKPTS." >&2
+  exit 2
+fi
 
 mkdir -p "$OUT_DIR" "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
+
+resolve_local_path() {
+  local label="$1"
+  local input_path="$2"
+  local basename_path
+  basename_path=$(basename "$input_path")
+
+  if [[ -d "$input_path" ]]; then
+    echo "$input_path"
+    return 0
+  fi
+
+  # Some launch environments export MODEL_PATH relative to the repo root
+  # (/MURE-V2/code/MetaEmbed/models/...), while the local base models live
+  # under colqwen_multigranularity/models.
+  local candidates=(
+    "$PROJECT_DIR/models/$basename_path"
+    "$REPO_ROOT/colqwen_multigranularity/models/$basename_path"
+    "$REPO_ROOT/models/$basename_path"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  if [[ "$input_path" = /* ]]; then
+    echo "$label directory not found: $input_path" >&2
+    echo "Checked fallback locations:" >&2
+    printf '  %s\n' "${candidates[@]}" >&2
+    return 2
+  fi
+
+  echo "$input_path"
+}
+
+MODEL_PATH=$(resolve_local_path "MODEL_PATH" "$MODEL_PATH")
+PROCESSOR_PATH=$(resolve_local_path "PROCESSOR_PATH" "$PROCESSOR_PATH")
+if [[ -d "$MODEL_PATH" && ! -f "$MODEL_PATH/config.json" ]]; then
+  echo "MODEL_PATH exists but config.json is missing: $MODEL_PATH" >&2
+  exit 2
+fi
+if [[ -d "$PROCESSOR_PATH" && ! -f "$PROCESSOR_PATH/preprocessor_config.json" ]]; then
+  echo "PROCESSOR_PATH exists but preprocessor_config.json is missing: $PROCESSOR_PATH" >&2
+  exit 2
+fi
+if [[ ! -f "$FOCUS_EVAL_CONFIG" ]]; then
+  echo "FOCUS_EVAL_CONFIG not found: $FOCUS_EVAL_CONFIG" >&2
+  exit 2
+fi
+
+FOCUS_SPLIT_DIR=${FOCUS_SPLIT_DIR:-$TMPDIR/textquery_focus_eval_${RUN_NAME}}
+mkdir -p "$FOCUS_SPLIT_DIR"
+VIDORE_V1_EVAL_CONFIG="$FOCUS_SPLIT_DIR/vidore_v1.yaml"
+VIDORE_V2_EVAL_CONFIG="$FOCUS_SPLIT_DIR/vidore_v2.yaml"
+MMEB_FOCUS_EVAL_CONFIG="$FOCUS_SPLIT_DIR/mmeb_focus.yaml"
+
+awk '
+  /^# Vidore v1/ {section="v1"; next}
+  /^# Vidore v2/ {section="v2"; next}
+  /^# MMEB/ {section="mmeb"; next}
+  section=="v1" {print}
+' "$FOCUS_EVAL_CONFIG" > "$VIDORE_V1_EVAL_CONFIG"
+awk '
+  /^# Vidore v1/ {section="v1"; next}
+  /^# Vidore v2/ {section="v2"; next}
+  /^# MMEB/ {section="mmeb"; next}
+  section=="v2" {print}
+' "$FOCUS_EVAL_CONFIG" > "$VIDORE_V2_EVAL_CONFIG"
+awk '
+  /^# Vidore v1/ {section="v1"; next}
+  /^# Vidore v2/ {section="v2"; next}
+  /^# MMEB/ {section="mmeb"; next}
+  section=="mmeb" {print}
+' "$FOCUS_EVAL_CONFIG" > "$MMEB_FOCUS_EVAL_CONFIG"
+
+if [[ ! -s "$VIDORE_V1_EVAL_CONFIG" || ! -s "$VIDORE_V2_EVAL_CONFIG" || ! -s "$MMEB_FOCUS_EVAL_CONFIG" ]]; then
+  echo "Failed to split FOCUS_EVAL_CONFIG into vidore_v1/vidore_v2/mmeb_focus sections: $FOCUS_EVAL_CONFIG" >&2
+  exit 2
+fi
 
 run_checkpoint() {
   local checkpoint="$1"
@@ -98,9 +188,10 @@ run_checkpoint() {
     output_dir="$OUT_DIR/$ckpt_name"
   fi
 
-  local beir_output_dir="$output_dir/beir"
-  local mmeb_output_dir="$output_dir/mmeb"
-  mkdir -p "$beir_output_dir" "$mmeb_output_dir"
+  local vidore_v1_output_dir="$output_dir/vidore_v1"
+  local vidore_v2_output_dir="$output_dir/vidore_v2"
+  local mmeb_output_dir="$output_dir/mmeb_focus"
+  mkdir -p "$vidore_v1_output_dir" "$vidore_v2_output_dir" "$mmeb_output_dir"
 
   local common_flags=(
     --model-name-or-path "$MODEL_PATH"
@@ -123,6 +214,9 @@ run_checkpoint() {
   if [[ -n "$SOFTASSIGN_KEEP_RATIO" ]]; then
     common_flags+=(--strategy1_softassign-keep-ratio "$SOFTASSIGN_KEEP_RATIO")
   fi
+  if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -eq 3 ]]; then
+    common_flags+=(--strategy1_softassign-keep-ratios "${SOFTASSIGN_KEEP_RATIOS[@]}")
+  fi
   if [[ "$USE_V2_RETRIEVER" == "1" || "$USE_V2_RETRIEVER" == "true" ]]; then
     common_flags+=(--use-v2-retriever)
   else
@@ -137,11 +231,13 @@ run_checkpoint() {
   {
     echo "[strategy1_softassign_eval_textquery_focus] checkpoint=$checkpoint"
     echo "[strategy1_softassign_eval_textquery_focus] strategy1_softassign_path=$strategy1_softassign_path"
-    echo "[strategy1_softassign_eval_textquery_focus] beir_eval_config=$EVAL_CONFIG"
-    echo "[strategy1_softassign_eval_textquery_focus] mmeb_eval_config=$MMEB_EVAL_CONFIG"
+    echo "[strategy1_softassign_eval_textquery_focus] focus_eval_config=$FOCUS_EVAL_CONFIG"
+    echo "[strategy1_softassign_eval_textquery_focus] vidore_v1_eval_config=$VIDORE_V1_EVAL_CONFIG"
+    echo "[strategy1_softassign_eval_textquery_focus] vidore_v2_eval_config=$VIDORE_V2_EVAL_CONFIG"
+    echo "[strategy1_softassign_eval_textquery_focus] mmeb_focus_eval_config=$MMEB_FOCUS_EVAL_CONFIG"
     echo "[strategy1_softassign_eval_textquery_focus] out_dir=$output_dir"
     echo "[strategy1_softassign_eval_textquery_focus] cuda=$CUDA_DEVICE_LIST num_gpus=$NUM_GPUS batch_query=$BATCH_QUERY batch_passage=$BATCH_PASSAGE batch_score=$BATCH_SCORE"
-    echo "[strategy1_softassign_eval_textquery_focus] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=${SOFTASSIGN_KEEP_RATIO:-from_config}"
+    echo "[strategy1_softassign_eval_textquery_focus] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=${SOFTASSIGN_KEEP_RATIO:-from_config} keep_ratios=${SOFTASSIGN_KEEP_RATIOS[*]:-from_config}"
   } | tee -a "$LOG_FILE"
 
   run_one_eval() {
@@ -150,6 +246,11 @@ run_checkpoint() {
     local dataset_format="$3"
     local avg_metric="$4"
     local output_path="$5"
+
+    if [[ -s "$output_path" ]]; then
+      echo "[strategy1_softassign_eval_textquery_focus] skip $eval_name because output exists: $output_path"
+      return 0
+    fi
 
     CUDA_VISIBLE_DEVICES="$CUDA_DEVICE_LIST" \
     PYTHONUNBUFFERED=1 \
@@ -168,10 +269,12 @@ run_checkpoint() {
   }
 
   {
-    echo "[strategy1_softassign_eval_textquery_focus] start beir stage"
-    run_one_eval "beir" "$EVAL_CONFIG" "beir" "ndcg_at_5" "$beir_output_dir/textquery_focus_beir.json"
-    echo "[strategy1_softassign_eval_textquery_focus] start mmeb stage"
-    run_one_eval "mmeb" "$MMEB_EVAL_CONFIG" "mmeb" "recall_at_5" "$mmeb_output_dir/textquery_focus_mmeb.json"
+    echo "[strategy1_softassign_eval_textquery_focus] start vidore_v1 stage"
+    run_one_eval "vidore_v1" "$VIDORE_V1_EVAL_CONFIG" "beir" "ndcg_at_5" "$vidore_v1_output_dir/textquery_focus_vidore_v1.json"
+    echo "[strategy1_softassign_eval_textquery_focus] start vidore_v2 stage"
+    run_one_eval "vidore_v2" "$VIDORE_V2_EVAL_CONFIG" "beir" "ndcg_at_5" "$vidore_v2_output_dir/textquery_focus_vidore_v2.json"
+    echo "[strategy1_softassign_eval_textquery_focus] start mmeb_focus stage"
+    run_one_eval "mmeb_focus" "$MMEB_FOCUS_EVAL_CONFIG" "mmeb" "recall_at_5" "$mmeb_output_dir/textquery_focus_mmeb_focus.json"
   } 2>&1 | tee -a "$LOG_FILE"
 }
 

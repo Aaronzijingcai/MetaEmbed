@@ -1,0 +1,88 @@
+config:
+  (): colpali_engine.trainer.colmodel_training.ColModelTrainingConfig
+  output_dir: !path /MURE-V2/code/MetaEmbed/colqwen_multigranularity/experiments/exp_stagecompress/original_metaembed/runs/original_metaembed_singleimage_baseline_8gpu_bsz4_4k_20260601
+  processor:
+    (): colpali_engine.utils.transformers_wrappers.AllPurposeWrapper
+    class_to_instantiate: !ext colpali_engine.models.qwen2_5.colqwen2_5.mm_processing_colqwen2_5.MultimodalColQwen2_5_Processor
+    pretrained_model_name_or_path:  "/MURE-V2/code/MetaEmbed/colqwen_multigranularity/models/colqwen2.5-base"
+    max_num_visual_tokens: 1024
+    use_simple_prompt: true
+    truncation_len: 16384
+
+  model:
+    (): colpali_engine.utils.transformers_wrappers.AllPurposeWrapper
+    class_to_instantiate: !ext colpali_engine.models.qwen2_5.lastqwen2_5.modeling_lastqwen2_5_new.LastQwen2_5
+    pretrained_model_name_or_path: "/MURE-V2/code/MetaEmbed/colqwen_multigranularity/models/colqwen2.5-base"
+    torch_dtype:  !ext torch.bfloat16
+    use_cache: false
+    attn_implementation: "flash_attention_2"
+    use_liger_kernel: false
+    dim: -1
+    num_query_prompt_tokens: 16
+    num_doc_prompt_tokens: 64
+    shared_query_doc_prompt: false
+
+  dataset_loading_cls:
+    (): colpali_engine.utils.mm_dataset_transformation.InterleavedDataset
+    subset2meta: !import /MURE-V2/code/MetaEmbed/colqwen_multigranularity/configs/train/moca_data_ratios_v3_nommE5.yaml
+    is_mast: true
+    num_shards: 128  # will be divided by world_size to serve the real number of shards per GPU
+    interleaved_batch_size: 4
+    stopping_strategy: "all_exhausted"
+
+  wandb_project: "MetaEmbed_original"
+
+  eval_dataset_loader: null
+  eval_dataset_loader_v2: null
+  no_eval_keywords: []
+  eval_dataset_loader_mmeb: null
+  vidore_eval_frequency: -1    # note this has to be divided by `eval_steps` in tr_args
+  eval_dataset_format: "beir"
+
+  use_mm_collator: true
+  use_v2_trainer: true
+  use_v2_retriever: true
+  num_negative: 1
+
+  run_eval: false
+  do_gather: true
+
+  loss_func:
+    (): colpali_engine.loss.late_interaction_losses.ColbertInBatchNegativeLoss
+    normalize_scores: false
+    temperature: 0.03
+    mrl_groups: [ [1, 1, 1.0], [2, 4, 1.0], [4, 8, 1.0], [8, 16, 1.0], [16, 64, 1.0], ]
+
+  tr_args:
+    (): transformers.training_args.TrainingArguments
+    output_dir: null
+    overwrite_output_dir: true
+    num_train_epochs: 5
+    per_device_train_batch_size: 4
+    gradient_checkpointing: true
+    gradient_checkpointing_kwargs: { "use_reentrant": false }
+    per_device_eval_batch_size: 4
+    eval_strategy: "no"
+    dataloader_num_workers: 0
+    save_steps: 500
+    logging_steps: 10
+    eval_steps: 500
+    warmup_steps: 500
+    learning_rate: 1e-4
+    save_total_limit: 16
+    resume_from_checkpoint: false
+    report_to: "none"
+    ddp_find_unused_parameters: false
+    # as we are using an Iterable dataset, max_steps is needed
+    max_steps: 4000
+
+  peft_config:
+    (): peft.LoraConfig
+    r: 32
+    lora_alpha: 32
+    lora_dropout: 0.1
+    init_lora_weights: "gaussian"
+    bias: "none"
+    task_type: "FEATURE_EXTRACTION"
+    target_modules: '(.*(model).*(down_proj|gate_proj|up_proj|k_proj|q_proj|v_proj|o_proj).*$)'
+    modules_to_save: ['prompt_embed_tokens', 'custom_text_proj']

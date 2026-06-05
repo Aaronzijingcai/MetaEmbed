@@ -99,7 +99,7 @@ class SoftAssignmentColQwen2_5(MRLColQwen2_5):  # noqa: N801
         anchor = torch.zeros((), device=device, dtype=dtype)
         if not self.training:
             return anchor
-        modules = [self.strategy1_softassign, self.base_model.visual]
+        modules = [self.base_model.visual]
         for module in modules:
             for parameter in module.parameters():
                 if parameter.requires_grad:

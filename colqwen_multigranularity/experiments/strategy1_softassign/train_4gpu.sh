@@ -56,7 +56,8 @@ DDP_FIND_UNUSED_PARAMETERS=${DDP_FIND_UNUSED_PARAMETERS:-1}
 
 SOFTASSIGN_STAGES=${SOFTASSIGN_STAGES:-all}
 SOFTASSIGN_BUDGETS=(${SOFTASSIGN_BUDGETS:-512 1024 2048})
-SOFTASSIGN_KEEP_RATIO=${SOFTASSIGN_KEEP_RATIO:-0.25}
+SOFTASSIGN_KEEP_RATIO=${SOFTASSIGN_KEEP_RATIO:-}
+SOFTASSIGN_KEEP_RATIOS=(${SOFTASSIGN_KEEP_RATIOS:-})
 SOFTASSIGN_TEMPERATURE=${SOFTASSIGN_TEMPERATURE:-0.1}
 LEARNABLE_TEMPERATURE=${LEARNABLE_TEMPERATURE:-0}
 DEBUG_SHAPES=${DEBUG_SHAPES:-0}
@@ -65,8 +66,61 @@ if [[ "${#SOFTASSIGN_BUDGETS[@]}" -ne 3 ]]; then
   echo "SOFTASSIGN_BUDGETS must contain three integers, got: ${SOFTASSIGN_BUDGETS[*]}" >&2
   exit 2
 fi
+if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 0 && "${#SOFTASSIGN_KEEP_RATIOS[@]}" -ne 3 ]]; then
+  echo "SOFTASSIGN_KEEP_RATIOS must be empty or contain three floats, got: ${SOFTASSIGN_KEEP_RATIOS[*]}" >&2
+  exit 2
+fi
 
-RUN_NAME=${RUN_NAME:-strategy1_softassign_full_4gpu_${SOFTASSIGN_STAGES}_kr${SOFTASSIGN_KEEP_RATIO}_${SOFTASSIGN_BUDGETS[0]}-${SOFTASSIGN_BUDGETS[1]}-${SOFTASSIGN_BUDGETS[2]}_$(date +%Y%m%d_%H%M%S)}
+resolve_local_path() {
+  local label="$1"
+  local input_path="$2"
+  local basename_path
+  basename_path=$(basename "$input_path")
+
+  if [[ -d "$input_path" ]]; then
+    echo "$input_path"
+    return 0
+  fi
+
+  local candidates=(
+    "$PROJECT_DIR/models/$basename_path"
+    "$REPO_ROOT/colqwen_multigranularity/models/$basename_path"
+    "$REPO_ROOT/models/$basename_path"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -d "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  if [[ "$input_path" = /* ]]; then
+    echo "$label directory not found: $input_path" >&2
+    echo "Checked fallback locations:" >&2
+    printf '  %s\n' "${candidates[@]}" >&2
+    return 2
+  fi
+
+  echo "$input_path"
+}
+
+MODEL_PATH=$(resolve_local_path "MODEL_PATH" "$MODEL_PATH")
+PROCESSOR_PATH=$(resolve_local_path "PROCESSOR_PATH" "$PROCESSOR_PATH")
+if [[ -d "$MODEL_PATH" && ! -f "$MODEL_PATH/config.json" ]]; then
+  echo "MODEL_PATH exists but config.json is missing: $MODEL_PATH" >&2
+  exit 2
+fi
+if [[ -d "$PROCESSOR_PATH" && ! -f "$PROCESSOR_PATH/preprocessor_config.json" ]]; then
+  echo "PROCESSOR_PATH exists but preprocessor_config.json is missing: $PROCESSOR_PATH" >&2
+  exit 2
+fi
+
+KEEP_LABEL=${SOFTASSIGN_KEEP_RATIO:-budget}
+if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -eq 3 ]]; then
+  KEEP_LABEL="${SOFTASSIGN_KEEP_RATIOS[0]}-${SOFTASSIGN_KEEP_RATIOS[1]}-${SOFTASSIGN_KEEP_RATIOS[2]}"
+fi
+RUN_NAME=${RUN_NAME:-strategy1_softassign_full_4gpu_${SOFTASSIGN_STAGES}_kr${KEEP_LABEL}_${SOFTASSIGN_BUDGETS[0]}-${SOFTASSIGN_BUDGETS[1]}-${SOFTASSIGN_BUDGETS[2]}_$(date +%Y%m%d_%H%M%S)}
 OUTPUT_DIR=${OUTPUT_DIR:-$PROJECT_DIR/runs/$RUN_NAME}
 LOG_FILE=${LOG_FILE:-$PROJECT_DIR/runs/logs/${RUN_NAME}.log}
 
@@ -74,9 +128,13 @@ SOFTASSIGN_ARGS=(
   --strategy1_softassign-enabled
   --strategy1_softassign-compress-stages "$SOFTASSIGN_STAGES"
   --strategy1_softassign-budgets "${SOFTASSIGN_BUDGETS[@]}"
-  --strategy1_softassign-keep-ratio "$SOFTASSIGN_KEEP_RATIO"
   --strategy1_softassign-temperature "$SOFTASSIGN_TEMPERATURE"
 )
+if [[ "${#SOFTASSIGN_KEEP_RATIOS[@]}" -eq 3 ]]; then
+  SOFTASSIGN_ARGS+=(--strategy1_softassign-keep-ratios "${SOFTASSIGN_KEEP_RATIOS[@]}")
+elif [[ -n "$SOFTASSIGN_KEEP_RATIO" ]]; then
+  SOFTASSIGN_ARGS+=(--strategy1_softassign-keep-ratio "$SOFTASSIGN_KEEP_RATIO")
+fi
 if [[ "$LEARNABLE_TEMPERATURE" == "1" || "$LEARNABLE_TEMPERATURE" == "true" ]]; then
   SOFTASSIGN_ARGS+=(--strategy1_softassign-learnable-temperature)
 fi
@@ -106,7 +164,7 @@ echo "[strategy1_softassign_train_4gpu] model=$MODEL_PATH"
 echo "[strategy1_softassign_train_4gpu] subset_config=$SUBSET_CONFIG"
 echo "[strategy1_softassign_train_4gpu] output_dir=$OUTPUT_DIR"
 echo "[strategy1_softassign_train_4gpu] max_steps=$MAX_STEPS save_steps=$SAVE_STEPS per_gpu_bsz=$PER_GPU_BSZ interleaved_bsz=$INTERLEAVED_BSZ grad_accum=$GRAD_ACCUM"
-echo "[strategy1_softassign_train_4gpu] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=$SOFTASSIGN_KEEP_RATIO temperature=$SOFTASSIGN_TEMPERATURE"
+echo "[strategy1_softassign_train_4gpu] budgets=${SOFTASSIGN_BUDGETS[*]} stages=$SOFTASSIGN_STAGES keep_ratio=${SOFTASSIGN_KEEP_RATIO:-none} keep_ratios=${SOFTASSIGN_KEEP_RATIOS[*]:-none} temperature=$SOFTASSIGN_TEMPERATURE"
 echo "[strategy1_softassign_train_4gpu] use_peft=$USE_PEFT doc_chunk_size=$DOC_CHUNK_SIZE truncation_len=$TRUNCATION_LEN"
 echo "[strategy1_softassign_train_4gpu] gradient_checkpointing=$GRADIENT_CHECKPOINTING"
 echo "[strategy1_softassign_train_4gpu] ddp_find_unused_parameters=$DDP_FIND_UNUSED_PARAMETERS"
@@ -120,7 +178,7 @@ PYTHONUNBUFFERED=1 \
   --num_processes "$NUM_GPUS" \
   --main_process_port "$MAIN_PROCESS_PORT" \
   --mixed_precision bf16 \
-  -m colqwen_multigranularity.experiments.strategy1_softassign.train_strategy1_softassign \
+  -m colqwen_multigranularity.experiments.strategy1_softassign.train_softassign \
   --model-name-or-path "$MODEL_PATH" \
   --processor-name-or-path "$PROCESSOR_PATH" \
   --output-dir "$OUTPUT_DIR" \

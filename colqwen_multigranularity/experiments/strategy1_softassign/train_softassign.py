@@ -4,6 +4,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import Tuple
 
 import configue
 import torch
@@ -26,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     sa_parser.add_argument("--strategy1_softassign-compress-stages", type=str, default="all")
     sa_parser.add_argument("--strategy1_softassign-budgets", type=int, nargs=3, default=[64, 64, 128])
     sa_parser.add_argument("--strategy1_softassign-keep-ratio", type=float, default=None)
+    sa_parser.add_argument("--strategy1_softassign-keep-ratios", type=float, nargs=3, default=None)
     sa_parser.add_argument("--strategy1_softassign-temperature", type=float, default=0.1)
     sa_parser.add_argument("--strategy1_softassign-learnable-temperature", action="store_true", default=False)
     sa_parser.add_argument("--strategy1_softassign-no-normalize-inputs", action="store_true", default=False)
@@ -33,7 +35,6 @@ def parse_args() -> argparse.Namespace:
     sa_parser.add_argument("--strategy1_softassign-no-preserve-input-rms", action="store_true", default=False)
     sa_parser.add_argument("--strategy1_softassign-debug-shapes", action="store_true", default=False)
     sa_parser.add_argument("--strategy1_softassign-path", type=str, default=None)
-    sa_parser.add_argument("--strategy1_softassign-skip-save", action="store_true", default=False)
     sa_args, remaining = sa_parser.parse_known_args()
 
     original_argv = sys.argv
@@ -57,6 +58,7 @@ def build_strategy1_softassign_config(args: argparse.Namespace) -> SoftAssignmen
         enabled=bool(args.strategy1_softassign_enabled),
         budgets=coerce_budgets(args.strategy1_softassign_budgets),
         keep_ratio=args.strategy1_softassign_keep_ratio,
+        keep_ratios=None if args.strategy1_softassign_keep_ratios is None else tuple(float(value) for value in args.strategy1_softassign_keep_ratios),
         compress_stages=args.strategy1_softassign_compress_stages,
         temperature=float(args.strategy1_softassign_temperature),
         learnable_temperature=bool(args.strategy1_softassign_learnable_temperature),
@@ -83,11 +85,37 @@ def build_model(args: argparse.Namespace, strategy1_softassign_config: SoftAssig
 def build_peft_config() -> LoraConfig:
     config = base_train.build_peft_config()
     modules = list(getattr(config, "modules_to_save", None) or [])
-    for name in ("custom_text_proj", "strategy1_softassign"):
-        if name not in modules:
-            modules.append(name)
+    if "custom_text_proj" not in modules:
+        modules.append("custom_text_proj")
+    # SoftAssign is saved by SoftAssignmentSaveCallback. Keeping it in PEFT
+    # modules_to_save wraps the whole compressor and can make DDP mark prototype
+    # parameters ready twice when text-query/doc/negative-doc forwards share one loss.
+    modules = [name for name in modules if name != "strategy1_softassign"]
     config.modules_to_save = modules
     return config
+
+
+def enable_active_strategy1_softassign_training(
+    model,
+    strategy1_softassign_config: SoftAssignmentConfig,
+) -> Tuple[int, int, Tuple[int, ...]]:
+    strategy1_softassign = SoftAssignmentSaveCallback()._find_strategy1_softassign(model)
+    if strategy1_softassign is None:
+        raise RuntimeError("strategy1_softassign module not found after trainer initialization.")
+    if not hasattr(strategy1_softassign, "stages"):
+        raise RuntimeError("strategy1_softassign module has no stages attribute.")
+
+    for parameter in strategy1_softassign.parameters():
+        parameter.requires_grad_(False)
+
+    active_stage_ids = strategy1_softassign_config.active_stage_ids()
+    for stage_index in active_stage_ids:
+        for parameter in strategy1_softassign.stages[stage_index].parameters():
+            parameter.requires_grad_(True)
+
+    total = sum(parameter.numel() for parameter in strategy1_softassign.parameters())
+    trainable = sum(parameter.numel() for parameter in strategy1_softassign.parameters() if parameter.requires_grad)
+    return trainable, total, active_stage_ids
 
 
 def save_final_strategy1_softassign(training_app: ColModelTraining, output_dir: Path) -> None:
@@ -191,14 +219,22 @@ def main() -> None:
 
         training_app = ColModelTraining(config, Path(__file__))
         training_app.init_trainer()
+        if strategy1_softassign_config.enabled and strategy1_softassign_config.active_stage_ids():
+            trainable_sa, total_sa, active_stage_ids = enable_active_strategy1_softassign_training(
+                training_app.trainer.model,
+                strategy1_softassign_config,
+            )
+            base_train.logger.info(
+                "Enabled Soft Assignment active stages after PEFT/DDP setup (active_stage_ids=%s, trainable=%d/%d).",
+                active_stage_ids,
+                trainable_sa,
+                total_sa,
+            )
         training_app.trainer.add_callback(SoftAssignmentSaveCallback())
         base_train.logger.info("Starting Soft Assignment training (max_steps=%d, budgets=%s, stages=%s)...", args.max_steps, strategy1_softassign_config.budgets, strategy1_softassign_config.compress_stages)
         training_app.train()
-        if args.strategy1_softassign_skip_save:
-            base_train.logger.info("Skipping model save because --strategy1_softassign-skip-save is set.")
-        else:
-            training_app.save()
-            save_final_strategy1_softassign(training_app, Path(args.output_dir))
+        training_app.save()
+        save_final_strategy1_softassign(training_app, Path(args.output_dir))
         if args.run_eval:
             training_app.eval()
     finally:
