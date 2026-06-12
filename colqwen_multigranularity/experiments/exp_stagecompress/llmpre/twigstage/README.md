@@ -1,5 +1,8 @@
 # TwigStage Legacy Path
 
+> Status: Legacy compatibility path. Prefer the current mainlines unless this branch is explicitly revived.
+
+
 This directory is now a backward-compatible entrypoint for the pure MRL_Main `llmpre/twigmrl` implementation.
 
 - Compression type: pruning.

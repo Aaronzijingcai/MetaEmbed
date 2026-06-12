@@ -1,5 +1,8 @@
 # TwigMRL
 
+> Status: Paused historical LLM-pre exploration. Not a current formal 8-GPU TODO after the 2026-06-10 mainline cleanup.
+
+
 TwigMRL is the MRL_Main-based trainable compression branch. It is not the MetaEmbed/global-token baseline.
 
 Pipeline:

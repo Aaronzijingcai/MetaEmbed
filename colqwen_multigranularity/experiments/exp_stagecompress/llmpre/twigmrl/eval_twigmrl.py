@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--drop-query-text-if-image", action="store_true", default=False)
     parser.add_argument("--drop-doc-text-if-image", action="store_true", default=False)
     parser.add_argument("--attn-implementation", type=str, default="flash_attention_2")
-    parser.add_argument("--twigmrl-mode", type=str, choices=["mask", "prune"], default="prune")
+    parser.add_argument("--twigmrl-mode", type=str, choices=["mask", "prune", "origttp"], default="prune")
     parser.add_argument("--twigmrl-exit-layer", type=int, default=2)
     parser.add_argument("--twigmrl-twig-depth", type=int, default=3)
     parser.add_argument("--twigmrl-keep-ratios", type=str, default="1.0,0.5,0.25")
@@ -136,6 +136,7 @@ def build_model(args: argparse.Namespace):
         compact_query_tokens=True,
         twigmrl_mode=args.twigmrl_mode,
         twigmrl_exit_layer=args.twigmrl_exit_layer,
+        twigmrl_twig_depth=args.twigmrl_twig_depth,
         twigmrl_keep_ratios=_parse_keep_ratios(args.twigmrl_keep_ratios),
         twigmrl_temperature=args.twigmrl_temperature,
         twigmrl_min_mask_value=args.twigmrl_min_mask_value,

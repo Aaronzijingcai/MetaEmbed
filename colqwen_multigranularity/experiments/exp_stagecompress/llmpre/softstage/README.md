@@ -1,5 +1,8 @@
 # SoftStage MRL_Main Compression
 
+> Status: Paused historical LLM-pre exploration. Not a current formal 8-GPU TODO after the 2026-06-10 mainline cleanup.
+
+
 This directory now contains a pure MRL_Main LLM-pre soft-mask compression algorithm. It does not append learnable Global MRL tokens.
 
 - Compression type: pruning-style soft mask.

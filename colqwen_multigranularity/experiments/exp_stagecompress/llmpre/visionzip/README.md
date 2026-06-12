@@ -1,11 +1,14 @@
 # VisionZip LLM-pre / LLM-early Compression
 
+> Status: Legacy compatibility path. Prefer the current mainlines unless this branch is explicitly revived.
+
+
 This directory contains two trainable VisionZip-style compression variants.
 
 | Method | Classification | Position | Sequence Shortening | Status |
 |---|---|---|---|---|
-| `LLMEarly-VisionZip` | 合并 | LLM浅层 | eval/inference: yes; training: differentiable full-length update | dual-GPU smoke passed; formal 8-GPU TODO |
-| `AdapterPre-VisionZip` | 合并 | LLM前 | eval/inference: yes; training: differentiable full-length update | dual-GPU smoke passed; formal 8-GPU TODO |
+| `LLMEarly-VisionZip` | 合并 | LLM浅层 | eval/inference: yes; training: differentiable full-length update | dual-GPU smoke passed; paused after 2026-06-10 cleanup |
+| `AdapterPre-VisionZip` | 合并 | LLM前 | eval/inference: yes; training: differentiable full-length update | dual-GPU smoke passed; paused after 2026-06-10 cleanup |
 
 Both variants follow the original VisionZip keep+merge idea:
 
@@ -47,8 +50,6 @@ VISIONZIP_POSITION=adapter_pre VISIONZIP_MODE=mask CUDA_DEVICE_LIST=0,1 NUM_GPUS
   bash experiments/exp_stagecompress/llmpre/visionzip/smoke_2gpu_train_eval.sh
 ```
 
-## TODO
+## Historical Note
 
-- Launch formal 8-GPU training/eval for `LLMEarly-VisionZip`.
-- Launch formal 8-GPU training/eval for `AdapterPre-VisionZip`.
-- Prefer `LLMEarly-VisionZip` for the first formal run if we want the insertion point closest to VisionZip/Twig-style LLM-side compression; prefer `AdapterPre-VisionZip` if we want compression before any LLM layer.
+This path is kept for reproducibility and implementation reference only. It is not a current formal run target after the 2026-06-10 mainline cleanup. New work should go through `../learnable_tokens/` or `../../folder_homo/` unless this branch is explicitly revived.

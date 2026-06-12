@@ -43,7 +43,7 @@ TWIGMRL_MIN_MASK_VALUE="${TWIGMRL_MIN_MASK_VALUE:-0.0}"
 
 {
   echo "[TwigMRL] run_dir=$RUN_DIR"
-  echo "[TwigMRL] cuda=$CUDA_VISIBLE_DEVICES num_gpus=$NUM_GPUS max_steps=$MAX_STEPS train_bsz=$TRAIN_BSZ interleaved_bsz=$INTERLEAVED_BSZ"
+  echo "[TwigMRL] cuda=$CUDA_VISIBLE_DEVICES num_gpus=$NUM_GPUS max_steps=$MAX_STEPS train_bsz=$TRAIN_BSZ grad_accum=${GRAD_ACCUM_STEPS:-4} interleaved_bsz=$INTERLEAVED_BSZ"
   echo "[TwigMRL] mode=$TWIGMRL_MODE exit_layer=$TWIGMRL_EXIT_LAYER twig_depth=$TWIGMRL_TWIG_DEPTH keep_ratios=$TWIGMRL_KEEP_RATIOS"
   "$ACCELERATE_BIN" launch --num_processes "$NUM_GPUS" --mixed_precision bf16 \
     -m colqwen_multigranularity.experiments.exp_stagecompress.llmpre.twigmrl.train_twigmrl \
@@ -61,7 +61,7 @@ TWIGMRL_MIN_MASK_VALUE="${TWIGMRL_MIN_MASK_VALUE:-0.0}"
     --per-device-train-batch-size "$TRAIN_BSZ" \
     --per-device-eval-batch-size "$EVAL_BSZ" \
     --vidore-eval-batch-size "${VIDORE_EVAL_BSZ:-4}" \
-    --gradient-accumulation-steps "${GRAD_ACCUM_STEPS:-1}" \
+    --gradient-accumulation-steps "${GRAD_ACCUM_STEPS:-4}" \
     --interleaved-batch-size "$INTERLEAVED_BSZ" \
     --num-shards "${NUM_SHARDS:-128}" \
     --stopping-strategy "${STOPPING_STRATEGY:-all_exhausted}" \

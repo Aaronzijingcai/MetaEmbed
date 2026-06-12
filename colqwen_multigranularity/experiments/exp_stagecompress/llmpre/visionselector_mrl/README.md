@@ -1,5 +1,8 @@
 # VisionSelectorMRL
 
+> Status: Paused historical LLM-pre exploration. Not a current formal 8-GPU TODO after the 2026-06-10 mainline cleanup.
+
+
 Pure MRL_main port of the reference VisionSelector idea.
 
 ## Method

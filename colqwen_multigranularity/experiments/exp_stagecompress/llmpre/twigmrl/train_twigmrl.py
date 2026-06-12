@@ -28,7 +28,7 @@ def _parse_keep_ratios(raw: str) -> list[float]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--twigmrl-state-path", type=str, default=None)
-    parser.add_argument("--twigmrl-mode", type=str, choices=["mask", "prune"], default="mask")
+    parser.add_argument("--twigmrl-mode", type=str, choices=["mask", "prune", "origttp"], default="mask")
     parser.add_argument("--twigmrl-exit-layer", type=int, default=2)
     parser.add_argument("--twigmrl-twig-depth", type=int, default=3)
     parser.add_argument("--twigmrl-keep-ratios", type=str, default="1.0,0.5,0.25")
@@ -171,13 +171,17 @@ def main() -> None:
         if args.use_peft:
             for _name, param in config.model.named_parameters():
                 param.requires_grad = False
+            trainable_terms = ["twig_layers", "custom_text_proj"]
+            if args.twigmrl_mode == "origttp":
+                trainable_terms.append("language_model.norm")
             for name, param in config.model.named_parameters():
-                if "twig_layers" in name or "custom_text_proj" in name:
+                if any(term in name for term in trainable_terms):
                     param.requires_grad = True
             trainable = sum(param.numel() for param in config.model.parameters() if param.requires_grad)
             total = sum(param.numel() for param in config.model.parameters())
             base_train.logger.info(
-                "TwigMRL trainable scope: twig_layers + custom_text_proj only (%d / %d params, %.4f%%).",
+                "TwigMRL trainable scope: %s (%d / %d params, %.4f%%).",
+                " + ".join(trainable_terms),
                 trainable,
                 total,
                 100.0 * trainable / max(total, 1),

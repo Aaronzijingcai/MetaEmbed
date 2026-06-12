@@ -1,5 +1,8 @@
 # VisionZipMRL
 
+> Status: Paused historical LLM-pre exploration. Not a current formal 8-GPU TODO after the 2026-06-10 mainline cleanup.
+
+
 VisionZipMRL is a pure MRL_Main visual-token pruning/merging branch. It borrows
 the VisionZip-style keep+merge mechanism, but does not append learnable Global
 MRL tokens and does not use the GlobalMRLToken loss.

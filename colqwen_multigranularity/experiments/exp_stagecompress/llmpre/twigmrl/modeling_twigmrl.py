@@ -10,8 +10,10 @@ import torch.nn as nn
 from peft import PeftModel
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLDecoderLayer,
+    apply_multimodal_rotary_pos_emb,
     create_causal_mask,
     create_sliding_window_causal_mask,
+    repeat_kv,
 )
 
 from colpali_engine.models import ColQwen2_5
@@ -26,7 +28,8 @@ class TwigDecoderBranch(nn.Module):
         if twig_depth <= 0:
             raise ValueError("twig_depth must be positive.")
         twig_config = copy.deepcopy(config)
-        twig_config._attn_implementation = "eager"
+        # Keep FlashAttention for the twig branch; score extraction below computes
+        # only the final active-token attention row instead of the full seq x seq map.
         self.config = twig_config
         self.has_sliding_layers = bool(getattr(config, "has_sliding_layers", False))
         self.layers = nn.ModuleList(
@@ -158,8 +161,8 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
         if len(self.stage_specs) != 3:
             raise ValueError("TwigMRL expects exactly three stages: g1/g2/g3.")
         mode = str(twigmrl_mode).lower()
-        if mode not in {"mask", "prune"}:
-            raise ValueError(f"twigmrl_mode must be 'mask' or 'prune', got {twigmrl_mode!r}.")
+        if mode not in {"mask", "prune", "origttp"}:
+            raise ValueError(f"twigmrl_mode must be 'mask', 'prune', or 'origttp', got {twigmrl_mode!r}.")
         if twigmrl_train_prune:
             raise ValueError(
                 "Hard pruning during training is disabled because MRLInBatchNegativeLoss builds masks "
@@ -365,20 +368,61 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
         except StopIteration:
             return module
 
-    def _run_twig_branch_scores(
+    def _last_row_attention_scores(
+        self,
+        decoder_layer: Qwen2_5_VLDecoderLayer,
+        norm_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        """Return TwigVLM's final active-token attention row without materializing full attention."""
+        attn = decoder_layer.self_attn
+        batch_size, seq_len, _ = norm_hidden_states.shape
+        query_states = attn.q_proj(norm_hidden_states)
+        key_states = attn.k_proj(norm_hidden_states)
+
+        query_states = query_states.view(batch_size, seq_len, -1, attn.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, seq_len, -1, attn.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, attn.rope_scaling["mrope_section"]
+        )
+        key_states = repeat_kv(key_states, attn.num_key_value_groups)
+
+        if attention_mask is None:
+            last_indices = torch.full((batch_size,), seq_len - 1, device=norm_hidden_states.device, dtype=torch.long)
+            key_mask = torch.ones((batch_size, seq_len), device=norm_hidden_states.device, dtype=torch.bool)
+        else:
+            key_mask = attention_mask.to(device=norm_hidden_states.device, dtype=torch.bool)
+            last_indices = key_mask.to(dtype=torch.long).sum(dim=1).clamp_min(1) - 1
+            last_indices = last_indices.to(device=norm_hidden_states.device)
+
+        positions = torch.arange(seq_len, device=norm_hidden_states.device)
+        key_mask = key_mask & positions.unsqueeze(0).le(last_indices.unsqueeze(1))
+        sliding_window = getattr(attn, "sliding_window", None)
+        if sliding_window is not None:
+            key_mask = key_mask & positions.unsqueeze(0).gt(last_indices.unsqueeze(1) - int(sliding_window))
+
+        batch_indices = torch.arange(batch_size, device=norm_hidden_states.device)
+        last_query = query_states[batch_indices, :, last_indices, :]
+        logits = torch.einsum("bhd,bhnd->bhn", last_query.float(), key_states.float()) * float(attn.scaling)
+        logits = logits.masked_fill(~key_mask.unsqueeze(1), torch.finfo(logits.dtype).min)
+        return torch.softmax(logits, dim=-1).mean(dim=1).to(dtype=norm_hidden_states.dtype)
+
+    def _run_twig_branch(
         self,
         *,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        """Run the TwigVLM-style auxiliary branch and return attention scores.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Run the TwigVLM-style auxiliary branch.
 
         This follows the original TwigVLM prefill logic: clone the hidden states
         at the exit layer, run `T` extra decoder layers, use the final twig
         layer's attention map as the token-importance signal, then discard the
-        twig hidden states and continue the main model from the original exit
-        hidden states.
+        twig hidden states when continuing the main model.
         """
         language_model = self.base_model.model.language_model
         branch_states = hidden_states
@@ -406,7 +450,7 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
                 device=branch_states.device,
             )
         position_embeddings = language_model.rotary_emb(branch_states, rope_position_ids)
-        last_attention = None
+        scores = None
         active_twig_layers = self._active_twig_layers_module()
         twig_config = getattr(active_twig_layers, "config", language_model.config)
         twig_has_sliding_layers = bool(getattr(active_twig_layers, "has_sliding_layers", getattr(language_model, "has_sliding_layers", False)))
@@ -430,38 +474,44 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
             )
 
         for layer_index, decoder_layer in enumerate(active_twig_layers):
-            want_attention = layer_index == len(active_twig_layers) - 1
+            want_scores = layer_index == len(active_twig_layers) - 1
+            if want_scores:
+                norm_branch_states = decoder_layer.input_layernorm(branch_states)
+                scores = self._last_row_attention_scores(
+                    decoder_layer,
+                    norm_branch_states,
+                    twig_attention_mask,
+                    position_embeddings,
+                )
             layer_outputs = decoder_layer(
                 branch_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=text_position_ids,
                 past_key_value=None,
-                output_attentions=want_attention,
+                output_attentions=False,
                 use_cache=False,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
             )
             branch_states = layer_outputs[0]
-            if want_attention:
-                last_attention = layer_outputs[1]
 
-        if last_attention is None:
-            return hidden_states.new_zeros(hidden_states.shape[:2])
-        if last_attention.ndim == 4:
-            attention = last_attention.mean(dim=1)
-        elif last_attention.ndim == 3:
-            attention = last_attention
-        else:
-            raise RuntimeError(f"Unexpected TwigMRL attention shape: {tuple(last_attention.shape)}")
+        if scores is None:
+            scores = hidden_states.new_zeros(hidden_states.shape[:2])
+        return branch_states, scores.to(dtype=hidden_states.dtype)
 
-        if attention_mask is None:
-            last_indices = torch.full((attention.shape[0],), attention.shape[1] - 1, device=attention.device, dtype=torch.long)
-        else:
-            last_indices = attention_mask.to(dtype=torch.long).sum(dim=1).clamp_min(1) - 1
-            last_indices = last_indices.to(device=attention.device)
-        batch_indices = torch.arange(attention.shape[0], device=attention.device)
-        scores = attention[batch_indices, last_indices, :]
-        return scores.to(dtype=hidden_states.dtype)
+    def _run_twig_branch_scores(
+        self,
+        *,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        _branch_states, scores = self._run_twig_branch(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+        )
+        return scores
 
     def _build_inputs_embeds(
         self,
@@ -603,9 +653,29 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
             apply_norm=False,
         )
 
+        language_model = self.base_model.model.language_model
+        if has_images and self.training and self.twigmrl_mode == "origttp" and exit_layer < len(language_model.layers):
+            branch_states, _selection_scores = self._run_twig_branch(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+            )
+            branch_states = language_model.norm(branch_states)
+            proj = self.base_model.custom_text_proj(branch_states)
+            proj = proj / proj.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            self._last_twigmrl_stats = {
+                "mode": self.twigmrl_mode,
+                "exit_layer": self.twigmrl_exit_layer,
+                "twig_depth": self.twigmrl_twig_depth,
+                "score_source": "twig_layers_attention",
+                "train_policy": "original_twig_branch_no_prune",
+            }
+            output_mask = attention_mask.to(device=proj.device, dtype=proj.dtype)
+            return proj * output_mask.unsqueeze(-1), attention_mask
+
         active_attention_mask = attention_mask
         active_position_ids = position_ids
-        if has_images and exit_layer < len(self.base_model.model.language_model.layers):
+        if has_images and exit_layer < len(language_model.layers):
             stage_map, crop_map = self._stage_and_crop_maps(input_ids=input_ids, image_grid_thw=active_image_grid_thw)
             stage_map = stage_map.to(hidden_states.device)
             crop_map = crop_map.to(hidden_states.device)
@@ -614,7 +684,7 @@ class TwigMRLColQwen2_5(MRLColQwen2_5):  # noqa: N801
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
-            use_true_prune = self.twigmrl_mode == "prune" and not self.training
+            use_true_prune = self.twigmrl_mode in {"prune", "origttp"} and not self.training
             gate, hard_keep = self._build_twigmrl_masks(
                 hidden_states=hidden_states,
                 input_ids=input_ids,

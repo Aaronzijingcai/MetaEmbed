@@ -14,6 +14,37 @@ bash colqwen_multigranularity/experiments/strategy2_visionzip/train_crop_first_v
 bash colqwen_multigranularity/experiments/strategy2_visionzip/train_stage_level_visual_attn.sh
 ```
 
+对应测试入口：
+
+```bash
+# 测试已完成的 crop-first visual_attn run
+bash colqwen_multigranularity/experiments/strategy2_visionzip/eval_crop_first_visual_attn.sh
+
+# 测试已完成的 stage-level visual_attn run
+bash colqwen_multigranularity/experiments/strategy2_visionzip/eval_stage_level_visual_attn.sh
+
+# 依次测试上述两个已完成 run
+bash colqwen_multigranularity/experiments/strategy2_visionzip/eval_completed_visual_attn_runs.sh
+```
+
+三个测试脚本默认使用：
+
+```text
+ATTN_IMPL=eager
+VISIONZIP_ATTENTION_SOURCE=visual_attn
+VISIONZIP_VISUAL_ATTN_LAYER=-2
+VISIONZIP_BUDGETS=64 128 256
+```
+
+评测结果默认写到 `runs/eval/`，日志写到 `runs/logs/`。如需调整 GPU 或 batch，可覆盖环境变量，例如：
+
+```bash
+CUDA_DEVICE_LIST=0,1 NUM_GPUS=2 BATCH_PASSAGE=2 BATCH_SCORE=8 \
+bash colqwen_multigranularity/experiments/strategy2_visionzip/eval_completed_visual_attn_runs.sh
+```
+
+如果多卡评测出现 `DataLoader worker ... Bus error` 或 `insufficient shared memory (shm)`，不是 CUDA 显存不足，而是 DataLoader workers 乘以 rank 数后耗尽容器 `/dev/shm`。默认 completed-runs 评测脚本已设 `NUM_WORKERS=0` 避免该问题；手动调高时建议从 `NUM_WORKERS=1` 小步尝试。
+
 两个脚本的共同默认配置：
 
 ```text
