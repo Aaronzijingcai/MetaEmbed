@@ -267,6 +267,12 @@ def parse_args() -> argparse.Namespace:
             "otherwise deadlock DDP all-reduce on vision_tower gradients."
         ),
     )
+    parser.add_argument(
+        "--ignore-data-skip",
+        action="store_true",
+        default=False,
+        help="Pass-through to transformers TrainingArguments for fast checkpoint resume.",
+    )
     parser.set_defaults(
         use_v2_trainer=True,
         use_v2_retriever=True,
@@ -352,6 +358,7 @@ def build_training_arguments(args: argparse.Namespace) -> TrainingArguments:
         warmup_steps=args.warmup_steps,
         max_steps=args.max_steps,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        ignore_data_skip=args.ignore_data_skip,
         report_to=_training_report_to(),
         ddp_find_unused_parameters=args.ddp_find_unused_parameters,
         save_total_limit=4,

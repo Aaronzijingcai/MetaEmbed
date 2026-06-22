@@ -8,6 +8,8 @@ Current role:
 - Provide implementation references for the two active mainlines.
 - Use `strategy5_folder.py` as the empirical anchor for the homogeneity line.
 
+For the consolidated PruMerge / VisionZip / FOLDER / SCOPE notes, including canonical paper versions and local adaptation differences, see `../ALGORITHMS_PRUMERGE_VISIONZIP_FOLDER_SCOPE.md`.
+
 | Strategy | Current Role |
 |---|---|
 | `strategy1_softassign.py` | Archived baseline. |

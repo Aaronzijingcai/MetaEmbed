@@ -1,6 +1,7 @@
 import math
+import os
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -9,6 +10,118 @@ from colpali_engine.utils.dist_utils import all_gather_with_padding
 from colpali_engine.utils.torch_utils import get_torch_device
 from PIL import Image
 from transformers import BatchEncoding, BatchFeature, ProcessorMixin
+
+
+def _mure_env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _mure_env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or str(value).strip() == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _mure_maxsim_config() -> Dict[str, Union[int, float, str]]:
+    query_agg = os.environ.get("MURE_MAXSIM_QUERY_AGG", "sum").strip().lower()
+    if query_agg not in {"sum", "mean", "topk_mean"}:
+        query_agg = "sum"
+    return {
+        "query_drop_prefix": max(0, _mure_env_int("MURE_MAXSIM_QUERY_DROP_PREFIX", 0)),
+        "query_drop_suffix": max(0, _mure_env_int("MURE_MAXSIM_QUERY_DROP_SUFFIX", 0)),
+        "query_agg": query_agg,
+        "query_topk": max(0, _mure_env_int("MURE_MAXSIM_QUERY_TOPK", 0)),
+        "length_norm_alpha": max(0.0, _mure_env_float("MURE_MAXSIM_LENGTH_NORM_ALPHA", 0.0)),
+        "hit_penalty_weight": max(0.0, _mure_env_float("MURE_MAXSIM_HIT_PENALTY_WEIGHT", 0.0)),
+        "hit_penalty_threshold": min(1.0, max(0.0, _mure_env_float("MURE_MAXSIM_HIT_PENALTY_THRESHOLD", 0.35))),
+    }
+
+
+def _mure_as_vector_list(xs: Union[torch.Tensor, List[torch.Tensor]]) -> List[torch.Tensor]:
+    if isinstance(xs, torch.Tensor):
+        return list(torch.unbind(xs, dim=0))
+    return list(xs)
+
+
+def _mure_trim_query_vectors(
+    qs: Union[torch.Tensor, List[torch.Tensor]],
+    *,
+    drop_prefix: int,
+    drop_suffix: int,
+) -> List[torch.Tensor]:
+    query_vectors = _mure_as_vector_list(qs)
+    if drop_prefix <= 0 and drop_suffix <= 0:
+        return query_vectors
+    trimmed: List[torch.Tensor] = []
+    for query in query_vectors:
+        length = int(query.shape[0])
+        if length <= 1:
+            trimmed.append(query)
+            continue
+        start = min(drop_prefix, length - 1)
+        end = length - min(drop_suffix, length - start - 1)
+        if end <= start:
+            end = min(start + 1, length)
+        trimmed.append(query[start:end])
+    return trimmed
+
+
+def _mure_hit_concentration_penalty(
+    hit_indices: torch.Tensor,
+    *,
+    query_length: int,
+    threshold: float,
+    weight: float,
+) -> torch.Tensor:
+    if weight <= 0.0 or query_length <= 1:
+        return torch.zeros(hit_indices.shape[:2], dtype=torch.float32, device=hit_indices.device)
+    device = hit_indices.device
+    flat = hit_indices.detach().reshape(-1, query_length).to("cpu")
+    penalties = torch.empty(flat.shape[0], dtype=torch.float32)
+    for row_idx, row in enumerate(flat):
+        counts = torch.bincount(row)
+        max_fraction = float(counts.max().item()) / float(query_length) if counts.numel() > 0 else 0.0
+        penalties[row_idx] = max(0.0, max_fraction - threshold) * weight * float(query_length)
+    return penalties.reshape(hit_indices.shape[0], hit_indices.shape[1]).to(device)
+
+
+def _mure_aggregate_maxsim(similarity: torch.Tensor, config: Dict[str, Union[int, float, str]]) -> torch.Tensor:
+    token_scores, hit_indices = similarity.max(dim=3)
+    query_length = int(token_scores.shape[2])
+    query_agg = str(config["query_agg"])
+    query_topk = int(config["query_topk"])
+
+    if query_agg == "mean":
+        scores = token_scores.mean(dim=2)
+    elif query_agg == "topk_mean":
+        k = query_topk if query_topk > 0 else min(8, query_length)
+        k = max(1, min(k, query_length))
+        scores = token_scores.topk(k, dim=2).values.mean(dim=2)
+    else:
+        scores = token_scores.sum(dim=2)
+        alpha = float(config["length_norm_alpha"])
+        if alpha > 0.0:
+            scores = scores / (float(query_length) ** alpha)
+
+    hit_penalty_weight = float(config["hit_penalty_weight"])
+    if hit_penalty_weight > 0.0:
+        scores = scores - _mure_hit_concentration_penalty(
+            hit_indices,
+            query_length=query_length,
+            threshold=float(config["hit_penalty_threshold"]),
+            weight=hit_penalty_weight,
+        )
+    return scores
 
 
 class BaseVisualRetrieverProcessor(ABC, ProcessorMixin):
@@ -99,6 +212,13 @@ class BaseVisualRetrieverProcessor(ABC, ProcessorMixin):
             tensor is saved on the "cpu" device.
         """
         device = device or get_torch_device("auto")
+        config = _mure_maxsim_config()
+        qs = _mure_trim_query_vectors(
+            qs,
+            drop_prefix=int(config["query_drop_prefix"]),
+            drop_suffix=int(config["query_drop_suffix"]),
+        )
+        ps = _mure_as_vector_list(ps)
 
         if len(qs) == 0:
             raise ValueError("No queries provided")
@@ -116,11 +236,8 @@ class BaseVisualRetrieverProcessor(ABC, ProcessorMixin):
                 ps_batch = torch.nn.utils.rnn.pad_sequence(
                     ps[j : j + batch_size], batch_first=True, padding_value=0
                 ).to(device)
-                scores_batch.append(
-                    torch.einsum("bnd,csd->bcns", qs_batch, ps_batch)
-                    .max(dim=3)[0]
-                    .sum(dim=2)
-                )
+                similarity = torch.einsum("bnd,csd->bcns", qs_batch, ps_batch)
+                scores_batch.append(_mure_aggregate_maxsim(similarity, config))
             scores_batch = torch.cat(scores_batch, dim=1).cpu()
             scores_list.append(scores_batch)
 
@@ -140,6 +257,13 @@ class BaseVisualRetrieverProcessor(ABC, ProcessorMixin):
         # device: torch.device,
     ) -> torch.Tensor:
         """Compute scores for local query subset against all passages"""
+        config = _mure_maxsim_config()
+        qs = _mure_trim_query_vectors(
+            qs,
+            drop_prefix=int(config["query_drop_prefix"]),
+            drop_suffix=int(config["query_drop_suffix"]),
+        )
+        ps = _mure_as_vector_list(ps)
         scores_list: List[torch.Tensor] = []
 
         for i in range(0, len(qs), batch_size):
@@ -153,13 +277,8 @@ class BaseVisualRetrieverProcessor(ABC, ProcessorMixin):
                     ps[j : j + batch_size], batch_first=True, padding_value=0
                 )
 
-                # Compute MaxSim scores: max over passage tokens, sum over query tokens
-                batch_scores = (
-                    torch.einsum("bnd,csd->bcns", qs_batch, ps_batch)
-                    .max(dim=3)[0]
-                    .sum(dim=2)
-                )
-                scores_batch.append(batch_scores)
+                similarity = torch.einsum("bnd,csd->bcns", qs_batch, ps_batch)
+                scores_batch.append(_mure_aggregate_maxsim(similarity, config))
 
             scores_batch = torch.cat(scores_batch, dim=1)
             scores_list.append(scores_batch)

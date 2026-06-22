@@ -32,6 +32,7 @@ os.environ.setdefault("CACHED_DATA_DIR", str(_PROJECT_DIR / "cached_data_dir"))
 
 from colpali_engine.models import ColQwen2_5
 from colpali_engine.trainer.eval_utils import external_evaluate_dataset_loader
+from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.core import (
     MRLColQwen2_5,
     _apply_compat_patch,
@@ -357,7 +358,7 @@ def _run_eval(args: argparse.Namespace, model, processor, eval_dataset_loader: d
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     model, checkpoint_layout, resolved_checkpoint = build_model(args)
     if torch.cuda.is_available():
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -409,7 +410,7 @@ def main() -> None:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     if dist.is_initialized():
         dist.barrier()
-        dist.destroy_process_group()
+        base_train._cleanup_distributed()
 
 
 if __name__ == "__main__":

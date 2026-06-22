@@ -13,6 +13,7 @@ from torch import distributed as dist
 
 from colpali_engine.trainer.eval_utils import external_evaluate_dataset_loader
 from colqwen_multigranularity import eval as base_eval
+from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.core import normalize_granularities
 
 from .config import FolderHomoConfig
@@ -47,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--folder-homo-scorer-heads', type=int, default=8)
     parser.add_argument('--folder-homo-scorer-dropout', type=float, default=0.1)
     parser.add_argument('--folder-homo-debug-shapes', action='store_true', default=False)
+    parser.add_argument('--folder-homo-eval-prefix-level', type=int, default=3)
     parser.add_argument('--only-eval-keywords', type=str, nargs='*', default=None)
     parser.add_argument('--smoke-eval-max-queries', type=int, default=0)
     parser.add_argument('--smoke-eval-max-corpus', type=int, default=0)
@@ -78,6 +80,7 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         scorer_heads=int(args.folder_homo_scorer_heads),
         scorer_dropout=float(args.folder_homo_scorer_dropout),
         debug_shapes=bool(args.folder_homo_debug_shapes),
+        eval_prefix_level=int(args.folder_homo_eval_prefix_level),
     )
 
 
@@ -135,6 +138,47 @@ def _select_dataset_rows(dataset, indices):
     return [dataset[index] for index in indices]
 
 
+def _string_set(values) -> set[str]:
+    if values is None:
+        return set()
+    if isinstance(values, (str, int)):
+        return {str(values)}
+    out = set()
+    try:
+        iterator = values.items() if isinstance(values, dict) else values
+    except TypeError:
+        return {str(values)}
+    for value in iterator:
+        if isinstance(value, tuple) and len(value) == 2:
+            value = value[0]
+        out.add(str(value))
+    return out
+
+
+def _qrels_positive_doc_ids(qrels, query_ids: set[str]) -> set[str]:
+    positive_ids: set[str] = set()
+    if qrels is None or not query_ids:
+        return positive_ids
+    if isinstance(qrels, dict):
+        for qid in query_ids:
+            rels = qrels.get(qid) or qrels.get(str(qid))
+            positive_ids.update(_string_set(rels))
+        return positive_ids
+    if hasattr(qrels, 'column_names'):
+        names = set(qrels.column_names)
+        query_key = 'query_id' if 'query_id' in names else ('qid' if 'qid' in names else None)
+        doc_key = 'corpus_id' if 'corpus_id' in names else ('doc_id' if 'doc_id' in names else ('did' if 'did' in names else None))
+        score_key = 'score' if 'score' in names else None
+        if query_key is not None and doc_key is not None:
+            for row in qrels:
+                if str(row[query_key]) not in query_ids:
+                    continue
+                if score_key is not None and float(row[score_key]) <= 0:
+                    continue
+                positive_ids.add(str(row[doc_key]))
+    return positive_ids
+
+
 def _limit_eval_dataset(dataset: dict[str, Any], *, max_queries: int, max_corpus: int, dataset_format: str) -> dict[str, Any]:
     if max_queries <= 0 and max_corpus <= 0:
         return dataset
@@ -171,6 +215,20 @@ def _limit_eval_dataset(dataset: dict[str, Any], *, max_queries: int, max_corpus
         limited_query_ids = set(limited_queries['query_id']) if 'query_id' in limited_queries.column_names else None
         if limited_query_ids is not None:
             qrels = {qid: rels for qid, rels in qrels.items() if qid in limited_query_ids}
+    if qrels is not None and hasattr(limited_corpus, 'column_names'):
+        query_ids = set(str(qid) for qid in limited_queries['query_id']) if 'query_id' in limited_queries.column_names else set()
+        positive_ids = _qrels_positive_doc_ids(qrels, query_ids)
+        did_column = None
+        for candidate in ('corpus_id', 'doc_id', 'corpus-id', 'did', 'id'):
+            if candidate in limited_corpus.column_names:
+                did_column = candidate
+                break
+        if positive_ids and did_column is not None:
+            selected = set(range(corpus_count))
+            for idx, did in enumerate(corpus[did_column]):
+                if str(did) in positive_ids:
+                    selected.add(idx)
+            limited_corpus = _select_dataset_rows(corpus, sorted(selected))
     return {'queries': limited_queries, 'corpus': limited_corpus, 'qrels': qrels}
 
 
@@ -206,7 +264,7 @@ def _run_eval(args: argparse.Namespace, model, processor, eval_dataset_loader: d
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     folder_homo_config = build_config(args)
     model = build_model(args, folder_homo_config)
     if torch.cuda.is_available():
@@ -214,6 +272,7 @@ def main() -> None:
         device = torch.device(f'cuda:{local_rank}')
         torch.cuda.set_device(device)
         model.to(device)
+    base_eval.configure_maxsim_env(args)
     processor = base_eval.build_processor(args)
     eval_dataset_loader = configue.load(Path(args.eval_config))
     only_eval_keywords = args.only_eval_keywords if args.only_eval_keywords else None
@@ -231,6 +290,7 @@ def main() -> None:
             'event': 'folder_homo_eval_start',
             'compress_stages': folder_homo_config.compress_stages,
             'budgets': folder_homo_config.budgets,
+            'eval_prefix_level': folder_homo_config.eval_prefix_level,
             'novelty_weight': folder_homo_config.novelty_weight,
             'gate_strength': folder_homo_config.gate_strength,
             'eval_config': str(args.eval_config),
@@ -245,7 +305,7 @@ def main() -> None:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     if dist.is_initialized():
         dist.barrier()
-        dist.destroy_process_group()
+        base_train._cleanup_distributed()
 
 
 if __name__ == '__main__':

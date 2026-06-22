@@ -34,6 +34,7 @@ os.environ.setdefault("CACHED_DATA_DIR", str(_PROJECT_DIR / "cached_data_dir"))
 from colpali_engine.models.qwen2_5.colqwen2_5.mm_processing_colqwen2_5 import MultimodalColQwen2_5_Processor
 from colpali_engine.models.qwen2_5.lastqwen2_5.modeling_lastqwen2_5_new import LastQwen2_5
 from colpali_engine.trainer.eval_utils import external_evaluate_dataset_loader
+from colqwen_multigranularity import train as base_train
 
 
 def _maybe_init_distributed() -> None:
@@ -228,7 +229,7 @@ def build_model(args: argparse.Namespace):
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     try:
         mrl_groups = _parse_mrl_groups(args.mrl_groups)
         if _is_rank0():
@@ -288,7 +289,7 @@ def main() -> None:
             dist.barrier()
     finally:
         if dist.is_available() and dist.is_initialized():
-            dist.destroy_process_group()
+            base_train._cleanup_distributed()
 
 
 if __name__ == "__main__":

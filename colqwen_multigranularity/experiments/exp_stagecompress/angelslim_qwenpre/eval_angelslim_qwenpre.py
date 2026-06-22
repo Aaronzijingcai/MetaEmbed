@@ -30,6 +30,7 @@ os.environ.setdefault("CACHED_DATA_DIR", str(_PROJECT_DIR / "cached_data_dir"))
 
 from colpali_engine.models import ColQwen2_5
 from colqwen_multigranularity.core import MRLColQwen2_5, _apply_compat_patch, normalize_granularities
+from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.experiments.exp_stagecompress.angelslim_qwenpre.modeling_angelslim_qwenpre import (
     AngelSlimQwenPreMRLColQwen2_5,
     apply_angelslim_qwenpre_adapter,
@@ -207,7 +208,7 @@ def build_model(args: argparse.Namespace):
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     model, checkpoint_layout, resolved_checkpoint, resolved_config = build_model(args)
     if torch.cuda.is_available():
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -263,7 +264,7 @@ def main() -> None:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     if dist.is_initialized():
         dist.barrier()
-        dist.destroy_process_group()
+        base_train._cleanup_distributed()
 
 
 if __name__ == "__main__":

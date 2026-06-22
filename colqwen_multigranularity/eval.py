@@ -82,6 +82,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--processor-max-length", type=int, default=None)
     parser.add_argument("--query-augmentation-repeats", type=int, default=10)
     parser.add_argument("--document-augmentation-repeats", type=int, default=0)
+    parser.add_argument("--maxsim-query-drop-prefix", type=int, default=0)
+    parser.add_argument("--maxsim-query-drop-suffix", type=int, default=0)
+    parser.add_argument(
+        "--maxsim-query-agg",
+        type=str,
+        default="sum",
+        choices=["sum", "mean", "topk_mean"],
+    )
+    parser.add_argument("--maxsim-query-topk", type=int, default=0)
+    parser.add_argument("--maxsim-length-norm-alpha", type=float, default=0.0)
+    parser.add_argument("--maxsim-hit-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--maxsim-hit-penalty-threshold", type=float, default=0.35)
     parser.add_argument(
         "--include-multilingual",
         action="store_true",
@@ -158,6 +170,17 @@ def build_processor(args: argparse.Namespace) -> MultiGranularityColQwen2_5Proce
     )
 
 
+def configure_maxsim_env(args: argparse.Namespace) -> None:
+    os.environ["MURE_MAXSIM_QUERY_DROP_PREFIX"] = str(max(getattr(args, "maxsim_query_drop_prefix", 0), 0))
+    os.environ["MURE_MAXSIM_QUERY_DROP_SUFFIX"] = str(max(getattr(args, "maxsim_query_drop_suffix", 0), 0))
+    os.environ["MURE_MAXSIM_QUERY_AGG"] = str(getattr(args, "maxsim_query_agg", "sum"))
+    os.environ["MURE_MAXSIM_QUERY_TOPK"] = str(max(getattr(args, "maxsim_query_topk", 0), 0))
+    os.environ["MURE_MAXSIM_LENGTH_NORM_ALPHA"] = str(max(getattr(args, "maxsim_length_norm_alpha", 0.0), 0.0))
+    os.environ["MURE_MAXSIM_HIT_PENALTY_WEIGHT"] = str(max(getattr(args, "maxsim_hit_penalty_weight", 0.0), 0.0))
+    threshold = min(max(getattr(args, "maxsim_hit_penalty_threshold", 0.35), 0.0), 1.0)
+    os.environ["MURE_MAXSIM_HIT_PENALTY_THRESHOLD"] = str(threshold)
+
+
 def build_model(args: argparse.Namespace):
     if args.mrl_state_dict_path is not None:
         model = build_colqwen2_5_mrl_model(
@@ -228,6 +251,8 @@ def main() -> None:
         device = torch.device(f"cuda:{local_rank}")
         torch.cuda.set_device(device)
         model.to(device)
+
+    configure_maxsim_env(args)
 
     processor = build_processor(args)
     eval_dataset_loader = configue.load(Path(args.eval_config))

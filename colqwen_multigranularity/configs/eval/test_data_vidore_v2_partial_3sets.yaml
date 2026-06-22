@@ -1,0 +1,15 @@
+# ViDoReV2 partial validation config for fast baseline-vs-candidate comparison.
+# Keep only representative English report-style subsets to avoid substring
+# matching ambiguity from --only-eval-keywords.
+
+esg_reports_human_labeled_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/esg_reports_human_labeled_v2
+
+biomedical_lectures_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/biomedical_lectures_eng_v2
+
+economics_reports_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/economics_reports_eng_v2

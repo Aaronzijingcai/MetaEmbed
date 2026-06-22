@@ -39,6 +39,14 @@ Current corrected run:
 experiments/exp_stagecompress/runs/folder_homo_native_qwen25_lora_linear_folder_bsz4_20260610_102541
 ```
 
+Completed formal budget runs:
+
+| Run | Budget | Visual Tokens | ViDoReV1 | ViDoReV2 | MMEB | Avg | Note |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `folder_homo_native_qwen25_lora_linear_folder_bsz4_20260610_102541` | 160/320/640 | 1120 | 89.27 | 59.20 | 75.88 | 74.78 | First valid trainable FolderHomo. |
+| `folder_homo_residual160_native_qwen25_lora_linear_folder_bsz4_gc_20260611_163512` | 160/160/160 | 480 | 89.34 | 60.28 | 76.43 | 75.35 | Current strongest homogeneity result. |
+| `folder_homo_v1_b80_80_80_native_qwen25_lora_linear_folder_bsz4_gc_3k_20260615_231152` | 80/80/80 | 240 | 88.44 | 56.10 | 74.53 | 73.02 | 3k strong-compression ablation; quality drops mainly on ViDoReV2. |
+
 Default command:
 
 ```bash

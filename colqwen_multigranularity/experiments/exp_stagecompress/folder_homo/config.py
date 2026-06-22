@@ -18,6 +18,16 @@ class FolderHomoConfig:
     scorer_heads: int = 8
     scorer_dropout: float = 0.1
     debug_shapes: bool = False
+    eval_prefix_level: int = 3
+    marc_enabled: bool = False
+    marc_weight: float = 0.1
+    marc_beta: float = 20.0
+    marc_mode: str = "positive"
+    marc_margin: float = 0.02
+    marc_tau: float = 0.05
+    marc_dup_threshold: float = 0.88
+    marc_anchor_boost: float = 1.0
+    marc_anchor_floor: float = 0.05
 
     def active_stage_ids(self) -> Tuple[int, ...]:
         mode = str(self.compress_stages).strip().lower().replace(" ", "")

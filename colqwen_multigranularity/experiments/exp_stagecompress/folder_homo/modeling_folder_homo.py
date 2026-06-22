@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -144,8 +144,15 @@ class HomoFolderBlock(nn.Module):
         out = x * (1.0 + size.clamp_min(1e-12).log())
         return F.normalize(out.squeeze(0), dim=-1)
 
-    def forward(self, tokens: torch.Tensor, *, coarse_anchors: Optional[torch.Tensor] = None, text_context: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, tokens: torch.Tensor, *, coarse_anchors: Optional[torch.Tensor] = None, text_context: Optional[torch.Tensor] = None, return_aux: bool = False):
         if tokens.shape[0] == 0 or self.budget <= 0 or tokens.shape[0] <= self.budget:
+            if return_aux:
+                aux = {
+                    'source_tokens': tokens,
+                    'saliency_logits': tokens.new_zeros((tokens.shape[0],), dtype=tokens.dtype),
+                    'compressed_len': torch.tensor(tokens.shape[0], device=tokens.device, dtype=torch.long),
+                }
+                return tokens, aux
             return tokens
         enhanced, saliency, gate = self.scorer(tokens, text_context=text_context)
         saliency_norm = self._normalize_score(saliency.float()).to(tokens.dtype)
@@ -154,7 +161,15 @@ class HomoFolderBlock(nn.Module):
         continuous_importance = 0.5 * saliency_norm + 0.5 * novelty
         value_scale = 1.0 + self.gate_strength * gate.to(tokens.dtype) * continuous_importance
         gated_tokens = tokens * value_scale.unsqueeze(-1)
-        return self._folder_reduce(tokens=gated_tokens, enhanced=enhanced, protect=protect)
+        compressed = self._folder_reduce(tokens=gated_tokens, enhanced=enhanced, protect=protect)
+        if return_aux:
+            aux = {
+                'source_tokens': tokens,
+                'saliency_logits': saliency.to(tokens.dtype),
+                'compressed_len': torch.tensor(compressed.shape[0], device=tokens.device, dtype=torch.long),
+            }
+            return compressed, aux
+        return compressed
 
 
 class HomoFolderCompressor(nn.Module):
@@ -172,6 +187,12 @@ class HomoFolderCompressor(nn.Module):
             HomoFolderBlock(embed_dim=embed_dim, budget=int(config.budgets[index]), config=config)
             for index in range(3)
         ])
+        self._last_marc_aux: Optional[Dict[str, object]] = None
+
+    def pop_marc_aux(self) -> Optional[Dict[str, object]]:
+        aux = self._last_marc_aux
+        self._last_marc_aux = None
+        return aux
 
     def _split_stages(self, image_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         total = int(image_tokens.shape[0])
@@ -196,10 +217,15 @@ class HomoFolderCompressor(nn.Module):
             out[i, : seq.shape[0]] = seq
         return out
 
-    def forward(self, hidden_states: torch.Tensor, input_ids: torch.LongTensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.LongTensor, attention_mask: torch.Tensor, *, collect_marc_aux: bool = True) -> torch.Tensor:
         active_stages = set(self.config.active_stage_ids())
+        # Query forward clears the cache in the parent model. Keep the first
+        # document-side cache in a training step so hard-negative forwards do
+        # not overwrite the positive document auxiliary targets.
+        collect_marc = bool(collect_marc_aux and self.training and self.config.marc_enabled and active_stages and self._last_marc_aux is None)
         sequences: List[torch.Tensor] = []
         debug_rows = []
+        marc_rows: List[Dict[str, object]] = []
         for row_hidden, row_ids, row_attn in zip(hidden_states, input_ids, attention_mask):
             valid = row_attn.to(dtype=torch.bool)
             image_mask = row_ids.eq(self.image_token_id) & valid
@@ -210,22 +236,45 @@ class HomoFolderCompressor(nn.Module):
                 sequence = text_tokens if text_tokens.numel() > 0 else row_hidden.new_zeros((1, row_hidden.shape[-1]))
                 sequences.append(sequence)
                 debug_rows.append((int(sequence.shape[0]), 0, 0, 0))
+                if collect_marc:
+                    marc_rows.append({'text_len': int(text_tokens.shape[0]), 'stages': []})
                 continue
 
             stage_tokens = self._split_stages(image_tokens)
             text_context = text_tokens.mean(dim=0, keepdim=True) if self.config.use_text_context and text_tokens.numel() > 0 else None
             compressed: List[torch.Tensor] = []
+            stage_aux: List[Dict[str, object]] = []
             coarse_anchors: Optional[torch.Tensor] = None
+            running_image_offset = 0
             for stage_index, tokens in enumerate(stage_tokens):
                 if stage_index in active_stages:
-                    out = self.blocks[stage_index](tokens, coarse_anchors=coarse_anchors, text_context=text_context)
+                    if collect_marc:
+                        out, aux = self.blocks[stage_index](tokens, coarse_anchors=coarse_anchors, text_context=text_context, return_aux=True)
+                    else:
+                        out = self.blocks[stage_index](tokens, coarse_anchors=coarse_anchors, text_context=text_context)
+                        aux = None
                 else:
                     out = tokens
+                    aux = None
                 compressed.append(out)
+                if collect_marc and stage_index in active_stages and aux is not None:
+                    start = int(text_tokens.shape[0] + running_image_offset)
+                    end = int(start + out.shape[0])
+                    stage_aux.append({
+                        'stage_index': int(stage_index),
+                        'source_tokens': aux['source_tokens'],
+                        'saliency_logits': aux['saliency_logits'],
+                        'doc_start': start,
+                        'doc_end': end,
+                    })
+                running_image_offset += int(out.shape[0])
                 coarse_anchors = out if coarse_anchors is None else torch.cat([coarse_anchors, out], dim=0)
-            sequence = torch.cat([text_tokens, *compressed], dim=0)
+            prefix_level = max(1, min(int(getattr(self.config, 'eval_prefix_level', 3)), len(compressed)))
+            sequence = torch.cat([text_tokens, *compressed[:prefix_level]], dim=0)
             sequences.append(sequence)
-            debug_rows.append(tuple(int(x.shape[0]) for x in compressed))
+            debug_rows.append(tuple(int(x.shape[0]) for x in compressed[:prefix_level]))
+            if collect_marc:
+                marc_rows.append({'text_len': int(text_tokens.shape[0]), 'stages': stage_aux})
 
         output = self._pad_sequences(sequences, hidden_states.shape[-1])
         active_stages = set(self.config.active_stage_ids())
@@ -235,6 +284,8 @@ class HomoFolderCompressor(nn.Module):
                 for param in self.blocks[idx].parameters():
                     zero = zero + param.sum() * 0.0
             output = output + zero
+        if collect_marc:
+            self._last_marc_aux = {'rows': marc_rows, 'output_len': int(output.shape[1])}
         if self.config.debug_shapes:
             print(f'[HomoFolderCompressor] rows={debug_rows[:4]} output={list(output.shape)}', flush=True)
         return output
@@ -251,8 +302,14 @@ class HomoFolderMRLColQwen2_5(MRLColQwen2_5):
             embed_dim=self.dim,
         )
 
+    def pop_marc_aux(self) -> Optional[Dict[str, object]]:
+        return self.folder_homo.pop_marc_aux()
+
     def forward(self, input_ids: torch.LongTensor, attention_mask: torch.Tensor, pixel_values: Optional[torch.Tensor] = None, image_grid_thw: Optional[torch.LongTensor] = None, **kwargs) -> torch.Tensor:
         has_images = pixel_values is not None and image_grid_thw is not None and getattr(pixel_values, 'numel', lambda: 0)() > 0 and getattr(image_grid_thw, 'numel', lambda: 0)() > 0
+        is_query = bool(kwargs.get('is_query', False))
+        if is_query:
+            self.folder_homo.pop_marc_aux()
         hidden_states = self._project_hidden_states(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -262,7 +319,7 @@ class HomoFolderMRLColQwen2_5(MRLColQwen2_5):
         )
         if (not self.folder_homo_config.enabled) or len(self.folder_homo_config.active_stage_ids()) == 0:
             return self._compact_doc_embeddings(hidden_states, input_ids, attention_mask)
-        return self.folder_homo(hidden_states, input_ids, attention_mask)
+        return self.folder_homo(hidden_states, input_ids, attention_mask, collect_marc_aux=not is_query)
 
 
 def _load_adapter_with_fallback(base_model: ColQwen2_5, adapter_path: Path):

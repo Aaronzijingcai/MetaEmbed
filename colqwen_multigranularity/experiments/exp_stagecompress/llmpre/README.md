@@ -14,6 +14,12 @@ The clean project entry is also available at:
 experiments/exp_stagecompress/mainlines/learnable_tokens/
 ```
 
+## Design Notes
+
+| Path | Scope | Current Role |
+|---|---|---|
+| `pre_llm_prumerge_visionzip_folder_scope/` | PruMerge / VisionZip / FOLDER / SCOPE -> LLM 前 | 中文技术方案文档；包含 `adapter_pre` 位置说明、逐算法位置考察和统一实现建议，不是可运行实现。 |
+
 ## Paused Historical Paths
 
 | Path | Type | Position | Current Role |

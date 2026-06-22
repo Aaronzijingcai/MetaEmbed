@@ -21,8 +21,9 @@ METHOD_ROADMAP.md
 
 | Method | Code implementation | Smoke forward/backward | Smoke train | Smoke eval | Next action |
 |---|---|---|---|---|---|
-| Residual HomoFolder | `../../folder_homo/` | Passed previously | 160/160/160 training attempted; latest runs stopped before checkpoint | Eval after successful checkpoint | Relaunch with safer memory settings. |
-| Global-Guided Residual HomoFolder | `../../folder_global_homo/` | Passed | Not yet formal trained | Not yet formal evaluated | Start after Residual HomoFolder baseline is stable. |
+| Residual HomoFolder | `../../folder_homo/` | Passed previously | COMPLETED: `folder_homo_residual160_native_qwen25_lora_linear_folder_bsz4_gc_20260611_163512` | COMPLETED: V1 89.34, V2 60.28, MMEB 76.43, Avg 75.35 | Current best 480-token baseline. |
+| Global-Guided Residual HomoFolder | `../../folder_global_homo/` | Passed; 2-step train smoke passed with GC | COMPLETED: `folder_global_homo_native_qwen25_lora_linear_global_b160_160_160_bsz4_gc_20260612_221751` | COMPLETED: V1 89.08, V2 58.44, MMEB 73.75, Avg 73.76 | Did not beat residual160; keep as crop-level guidance ablation. |
+| FolderGainHomo geo_coverage | `../../folder_gain_homo/` | Passed random forward and 8-card smoke | COMPLETED: `folder_gain_homo_geo_coverage_b160_160_160_bsz4_gc_20260614_120847` | COMPLETED: V1 88.98, V2 56.46, MMEB 74.45, Avg 73.30 | Coverage gain ablation; ViDoReV2 drop makes it non-main. |
 | DART-Pivot Residual HomoFolder | `../../folder_dart_pivot/` | Passed, 2026-06-11 smoke | Passed, 1-step single-GPU smoke | Passed, tiny ViDoRe-v1/v2/MMEB | Candidate formal run at 160/160/160. |
 | GlobalCom-DART Fusion | `../../folder_global_dart_homo/` | Passed, 2026-06-11 smoke | Passed, 1-step single-GPU smoke | Passed, tiny ViDoRe-v1/v2/MMEB | Candidate formal run after DART-Pivot or Global-Guided ablation. |
 
@@ -30,6 +31,61 @@ Smoke summary:
 
 ```text
 ../../runs/smoke_homo_dart_20260611_181342/summary_rerun_eval.tsv
+```
+
+## Current Best Result
+
+As of 2026-06-15, the strongest completed homogeneity result is still Residual HomoFolder trained natively from Qwen2.5VL with LLM LoRA, custom linear, and the compressor at `160/160/160` visual budgets. A checkpoint-4000 prefix ablation was also completed to understand the token-quality frontier.
+
+```text
+Run: experiments/exp_stagecompress/runs/folder_homo_residual160_native_qwen25_lora_linear_folder_bsz4_gc_20260611_163512
+Eval: eval/folder_homo_ckpt4000_full_8gpu_b160_160_160_bq16_bp24_bs64_workers0_20260612_204616
+Tokens: 480 visual tokens
+ViDoReV1: 89.34
+ViDoReV2: 60.28
+MMEB: 76.43
+Overall Avg: 75.35
+```
+
+2026-06-15 follow-up full evals did not replace this best result:
+
+| Method | Run | Tokens | ViDoReV1 | ViDoReV2 | MMEB | Avg | Reading |
+|---|---|---:|---:|---:|---:|---:|---|
+| Global-Guided HomoFolder / V2 | `folder_global_homo_native_qwen25_lora_linear_global_b160_160_160_bsz4_gc_20260612_221751` | 480 | 89.08 | 58.44 | 73.75 | 73.76 | Crop-level guidance did not improve over residual160. |
+| FolderGainHomo `geo_coverage` | `folder_gain_homo_geo_coverage_b160_160_160_bsz4_gc_20260614_120847` | 480 | 88.98 | 56.46 | 74.45 | 73.30 | Coverage gain is viable but hurts ViDoReV2. |
+
+So the current paper mainline should still use Residual HomoFolder as the strongest real-token homogeneity compressor, while `geo_coverage` can be reported as a gain-definition ablation.
+
+Latest completed gain ablation:
+
+```text
+Method: FolderGainHomo V5 / MMR
+Run: experiments/exp_stagecompress/runs/folder_gain_homo_mmr_native_qwen25_lora_linear_gain_b160_160_160_bsz4_gc_20260614_124236
+Checkpoint: checkpoint-4000
+Eval: eval/folder_gain_homo_mmr_full_3sets
+Tokens: 480 visual tokens
+ViDoReV1: 88.96
+ViDoReV2: 58.76
+MMEB: 75.45
+Overall Avg: 74.39
+Status: DONE, ablation result below Residual HomoFolder residual160.
+```
+
+This improves over the previous `160/320/640` 1120-token FolderHomo result while using far fewer tokens. The working interpretation is that tighter residual budgets reduce cross-granularity redundancy and MaxSim noise rather than simply removing evidence.
+
+Checkpoint-4000 prefix ablation:
+
+| Prefix | Tokens | ViDoReV1 | ViDoReV2 | MMEB | Avg | Interpretation |
+|---|---:|---:|---:|---:|---:|---|
+| `G1` | 160 | 88.36 | 59.09 | 74.93 | 74.12 | Global base evidence alone is usable but loses detail. |
+| `G1 + R2` | 320 | 89.20 | 59.73 | 75.75 | 74.89 | Main marginal gain; strong efficiency point. |
+| `G1 + R2 + R3` | 480 | 89.34 | 60.28 | 76.43 | 75.35 | Best completed full representation. |
+
+Key reading:
+
+```text
+320 tokens are already close to 480 tokens, but 480 is still best.
+The goal is not simply fewer tokens; the goal is fewer and cleaner residual tokens.
 ```
 
 ## Problem Definition
@@ -85,6 +141,13 @@ R3: fine-scale residual evidence not already covered by G1 + R2
 | MLP-post FOLDER | 1120 | 89.6 | 58.8 | 75.1 | 74.5 | Best old MLP-post training-free/strategy anchor. |
 | FolderHomo trainable, 160/320/640 | 1120 | 89.27 | 59.20 | 75.88 | 74.78 | Correct native Qwen2.5 run with LoRA + linear + folder_homo. |
 | FolderHomo checkpoint eval-only, 160/160/160 | 480 | 88.86 | 58.50 | 75.55 | 74.30 | Same checkpoint, smaller inference budget. Very positive compression signal. |
+| FolderHomo residual160 trained, 160/160/160 | 480 | 89.34 | 60.28 | 76.43 | 75.35 | Current strongest completed homogeneity result. |
+| FolderHomo v1 trained, 80/80/80 | 240 | 88.44 | 56.10 | 74.53 | 73.02 | Completed 3k-step strong-compression ablation; lower than 480-token residual160, mainly due to ViDoReV2. |
+| Global-Guided HomoFolder / V2 | 480 | 89.08 | 58.44 | 73.75 | 73.76 | Completed P0 follow-up; not stronger than residual160. |
+| FolderGainHomo `geo_coverage` | 480 | 88.98 | 56.46 | 74.45 | 73.30 | Completed gain ablation; not stronger than residual160. |
+| FolderGainHomo `residual_mass` | 480 | 88.83 | 59.32 | 74.78 | 74.31 | Completed gain ablation; improves ViDoReV2 over geo but below residual160. |
+| FolderGainHomo `mmr` | 480 | 88.96 | 58.76 | 75.45 | 74.39 | Completed gain ablation; best gain-mode Avg but below residual160. |
+| FolderGainHomo `residual_mass_mmr` | 480 | 88.27 | 59.42 | 74.25 | 73.98 | Completed combination ablation; lower than single residual_mass/MMR. |
 
 
 ### Validated Version Notes
@@ -137,21 +200,21 @@ PAUSED: explored but not active
 
 | Item | Content |
 |---|---|
-| Status | RUNNING |
+| Status | DONE |
 | Source idea | FOLDER-style token merge plus our cross-stage novelty. |
 | Implementation | Existing `folder_homo/`. |
 | Compression target | `G1=160, R2=160, R3=160`, total visual tokens = 480. |
 | Core mechanism | Compress g1 first, then compress g2 with G1 as coarse anchors, then compress g3 with G1+R2 as anchors. |
 | Solves | Establishes that trainable cross-granularity residual compression can preserve retrieval quality at much lower token count. |
-| Expected result | Match or improve eval-only 480-token result; ideally keep Avg around 74+ and MMEB around 75+. |
-| Risk | If full retraining overfits or changes token geometry, eval-only result may not fully transfer. |
-| Next action | Finish current training, then run full 8-GPU evaluation. |
+| Result | V1 89.34 / V2 60.28 / MMEB 76.43 / Avg 75.35. |
+| Risk | Later gain variants can preserve V1/MMEB but may hurt ViDoReV2; do not replace residual160 without full three-suite gain. |
+| Next action | Use as current main method; compare remaining gain variants against it. |
 
 ### P0. Global-Guided Residual HomoFolder
 
 | Item | Content |
 |---|---|
-| Status | IMPLEMENTED / TODO-RUN |
+| Status | DONE / EVAL-DONE |
 | Implementation | `../../folder_global_homo/`. |
 | Source idea | GlobalCom2: use global view to command local crop compression. |
 | Borrowed concept | Global-to-local crop importance allocation. GlobalCom2 uses global CLS attention to allocate retention ratio for local crops. |
@@ -159,9 +222,9 @@ PAUSED: explored but not active
 | Compression target | Start with `160/160/160`; then test `160/80/160` and `80/80/80` if stable. |
 | Core mechanism | Compute crop importance from G1 to each g2/g3 crop, allocate per-crop residual budgets, then apply Folder merge inside each crop. |
 | Solves | Multi-crop homogeneity at the crop level: not every local crop deserves the same residual token budget. |
-| Expected result | Better token efficiency than uniform budgets, especially on high-resolution document tasks and ViDoReV2. |
-| Risk | Budget allocation is deterministic and fixed-total, but extra budget assignment is hard/ranked; the crop score also enters token protect/value scaling so the commander still receives gradient. |
-| Why P0 | This is the closest match to our multi-image/multi-crop homogeneity problem. |
+| Result | V1 89.08 / V2 58.44 / MMEB 73.75 / Avg 73.76. |
+| Risk | Crop-level budget allocation can remove or underweight fine evidence needed by ViDoReV2. |
+| Use now | Keep as ablation; do not replace residual160. |
 
 Proposed first formula:
 
@@ -253,12 +316,18 @@ Start with very small `gamma`, such as `0.01` or `0.05`.
 
 | Priority | Method | Status | Budget | Train? | Evaluation |
 |---|---|---|---|---|---|
-| P0 | Residual HomoFolder | RUNNING | 160/160/160 | Yes | Full ViDoReV1, ViDoReV2, MMEB after training. |
-| P0 | Global-Guided Residual HomoFolder | TODO | 160/160/160 | Yes | Full 3-set eval. Compare to Residual HomoFolder. |
+| P0 | Residual HomoFolder | COMPLETED | 160/160/160 | Yes | V1 89.34, V2 60.28, MMEB 76.43, Avg 75.35. |
+| P1 | FolderHomo strong compression | DONE | 80/80/80 | Yes | Full eval done: V1 88.44, V2 56.10, MMEB 74.53, Avg 73.02; useful 240-token boundary, not main. |
+| P0 | Global-Guided Residual HomoFolder | DONE | 160/160/160 | Yes | Full eval done: 73.76 Avg; not main. |
+| P1 | FolderGainHomo geo_coverage | DONE | 160/160/160 | Yes | Full eval done: 73.30 Avg; gain ablation. |
+| P1 | FolderGainHomo residual_mass_mmr | DONE | 160/160/160 | Yes | Full eval done: 73.98 Avg; combination ablation, no gain. |
 | P1 | DART-Pivot Residual HomoFolder | SMOKE-PASSED | 160/160/160 | Yes | Full 3-set eval. Compare to all-anchor novelty. |
 | P1 | GlobalCom-DART Fusion | SMOKE-PASSED | 160/160/160 | Yes | Run after DART-Pivot / Global-Guided ablation. |
 | P2 | Redundancy regularized variants | TODO | 160/160/160 | Yes | Add only to best P0/P1 architecture. |
-| P2 | Stronger compression | TODO | 160/80/160, 80/80/80 | Yes or eval-only first | Token/quality frontier. |
+| P1 | Stronger compression on best homogeneity model | PARTIAL DONE | 160/80/80, 120/60/60; 80/80/80 done | Yes | `80/80/80` reached 73.02 Avg; continue only on selected architectures. |
+| P1 | Bidirectional MaxSim eval-only | TODO | best 320/480 settings | No | Low-cost test for MaxSim asymmetry on MMEB. |
+| P2 | Redundancy regularized variants | TODO | 160/160/160 | Yes | Add only to best P0/P1 architecture. |
+| P2 | Residual learnable tokens | TODO | fixed low token budget | Yes | Use G1/R2/R3 idea if learnable-token route is revived. |
 
 ## Paper Story
 
@@ -329,3 +398,39 @@ folder_global_dart_homo/
 8. Keep gradient checkpointing enabled unless a smaller model/budget is proven to fit without OOM.
 
 Formal commands are in `../../FORMAL_8GPU_COMMANDS.md`.
+
+
+## Decision Matrix Added 2026-06-15
+
+Future work is organized around two questions:
+
+```text
+Does homogeneity compression keep improving?
+Do learnable tokens clearly improve MMEB / MaxSim length imbalance?
+```
+
+| Case | Main direction |
+|---|---|
+| Homogeneity good, learnable tokens good | Treat homogeneity as a principle with real-token and learned-token implementations. |
+| Homogeneity good, learnable tokens weak | Main paper focuses on real-token residual homogeneity; learnable tokens become ablation / limitation. |
+| Homogeneity weak, learnable tokens good | Switch main route to fixed-budget residual learnable tokens. |
+| Both weak | Stop widening compressors and focus on scoring / interaction mechanisms such as bidirectional MaxSim. |
+
+Recommended next sequence:
+
+```text
+1. Wait for the three homogeneity models to finish.
+2. Run unified 160/160/160 full eval.
+3. Select the best 1-2 architectures.
+4. Run stronger budgets: 160/80/80, 120/60/60; 80/80/80 is completed at 73.02 Avg.
+5. Test bidirectional MaxSim with alpha = 0.5, 0.7, 0.3.
+6. Decide whether residual learnable tokens deserve more training budget.
+```
+
+Bidirectional MaxSim scoring:
+
+```text
+score_qd = MaxSim(query_tokens -> doc_tokens)
+score_dq = MaxSim(doc_tokens -> query_tokens)
+score = alpha * score_qd + (1 - alpha) * score_dq
+```

@@ -30,6 +30,7 @@ os.environ.setdefault("DATA_DIR", str(_PROJECT_DIR / "data_dir") + "/")
 os.environ.setdefault("CACHED_DATA_DIR", str(_PROJECT_DIR / "cached_data_dir"))
 
 from colpali_engine.trainer.eval_utils import external_evaluate_dataset_loader
+from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.core import normalize_granularities
 from colqwen_multigranularity.processing import MultiGranularityColQwen2_5Processor
 from colqwen_multigranularity.experiments.exp_stagecompress.llmpre.visionselector_mrl.modeling_visionselector_mrl import build_visionselector_mrl_model
@@ -252,7 +253,7 @@ def _build_smoke_limited_loader(eval_dataset_loader: dict, *, max_queries: int, 
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     model = build_model(args)
 
     if torch.cuda.is_available():
@@ -340,7 +341,7 @@ def main() -> None:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     if dist.is_initialized():
         dist.barrier()
-        dist.destroy_process_group()
+        base_train._cleanup_distributed()
 
 
 if __name__ == "__main__":

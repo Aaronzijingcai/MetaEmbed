@@ -35,6 +35,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--folder-homo-scorer-heads', type=int, default=8)
     parser.add_argument('--folder-homo-scorer-dropout', type=float, default=0.1)
     parser.add_argument('--folder-homo-debug-shapes', action='store_true', default=False)
+    parser.add_argument('--marc-enabled', action='store_true', default=False)
+    parser.add_argument('--marc-weight', type=float, default=0.1)
+    parser.add_argument('--marc-beta', type=float, default=20.0)
+    parser.add_argument('--marc-mode', type=str, default='positive')
+    parser.add_argument('--marc-margin', type=float, default=0.02)
+    parser.add_argument('--marc-tau', type=float, default=0.05)
+    parser.add_argument('--marc-dup-threshold', type=float, default=0.88)
+    parser.add_argument('--marc-anchor-boost', type=float, default=1.0)
+    parser.add_argument('--marc-anchor-floor', type=float, default=0.05)
+    parser.add_argument('--warm-start-adapter-path', type=str, default=None)
     parser.add_argument('--folder-homo-skip-save', action='store_true', default=False)
     parser.add_argument('--folder-homo-train-compressor-only', action='store_true', default=False)
     homo_args, remaining = parser.parse_known_args()
@@ -65,6 +75,15 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         scorer_heads=int(args.folder_homo_scorer_heads),
         scorer_dropout=float(args.folder_homo_scorer_dropout),
         debug_shapes=bool(args.folder_homo_debug_shapes),
+        marc_enabled=bool(args.marc_enabled),
+        marc_weight=float(args.marc_weight),
+        marc_beta=float(args.marc_beta),
+        marc_mode=str(args.marc_mode),
+        marc_margin=float(args.marc_margin),
+        marc_tau=float(args.marc_tau),
+        marc_dup_threshold=float(args.marc_dup_threshold),
+        marc_anchor_boost=float(args.marc_anchor_boost),
+        marc_anchor_floor=float(args.marc_anchor_floor),
     )
 
 
@@ -105,6 +124,7 @@ def main() -> None:
             use_liger_kernel=args.use_liger_kernel,
             compact_query_tokens=args.compact_query_tokens,
             folder_homo_config=folder_homo_config,
+            adapter_path=args.warm_start_adapter_path,
         )
         base_train.logger.info('Model built in %.1fs', time.time() - t0)
 
@@ -143,7 +163,7 @@ def main() -> None:
             dataset_loading_cls=dataset_loading_cls,
             loss_func=loss_func,
             tr_args=tr_args,
-            peft_config=build_peft_config() if args.use_peft else None,
+            peft_config=build_peft_config() if args.use_peft and args.warm_start_adapter_path is None else None,
             wandb_project=args.wandb_project,
             use_mm_collator=True,
             use_v2_trainer=args.use_v2_trainer,
@@ -168,6 +188,18 @@ def main() -> None:
             for name, param in config.model.named_parameters():
                 if 'folder_homo' in name:
                     param.requires_grad = True
+
+        def _find_marc_provider(module):
+            if hasattr(module, 'pop_marc_aux'):
+                return module.pop_marc_aux
+            for _name, submodule in module.named_modules():
+                if hasattr(submodule, 'pop_marc_aux'):
+                    return submodule.pop_marc_aux
+            return None
+
+        loss_func.marc_provider = _find_marc_provider(config.model)
+        if folder_homo_config.marc_enabled and loss_func.marc_provider is None:
+            raise RuntimeError('MARC is enabled but no pop_marc_aux provider was found on the model.')
 
         homo_module = None
         for name, module in config.model.named_modules():

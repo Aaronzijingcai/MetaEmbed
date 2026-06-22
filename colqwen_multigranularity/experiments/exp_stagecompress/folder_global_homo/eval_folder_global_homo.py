@@ -13,6 +13,7 @@ from torch import distributed as dist
 
 from colpali_engine.trainer.eval_utils import external_evaluate_dataset_loader
 from colqwen_multigranularity import eval as base_eval
+from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.core import normalize_granularities
 
 from .config import FolderGlobalHomoConfig
@@ -210,7 +211,7 @@ def _run_eval(args: argparse.Namespace, model, processor, eval_dataset_loader: d
 
 def main() -> None:
     args = parse_args()
-    _maybe_init_distributed()
+    base_train._maybe_init_distributed()
     folder_global_homo_config = build_config(args)
     model = build_model(args, folder_global_homo_config)
     if torch.cuda.is_available():
@@ -249,7 +250,7 @@ def main() -> None:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
     if dist.is_initialized():
         dist.barrier()
-        dist.destroy_process_group()
+        base_train._cleanup_distributed()
 
 
 if __name__ == '__main__':
