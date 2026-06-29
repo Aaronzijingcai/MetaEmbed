@@ -568,3 +568,114 @@ GPU status: all 8 GPUs active at 100% utilization during startup check
 ```
 
 Next actions after completion: evaluate checkpoint-4000 on the standard full 3-set config. If P1 is competitive, run P2/T3 capacity-up and P3/T1 capacity-down to build the token-count vs performance curve, then run P8 tail-placement control.
+
+## 2026-07-01 New Experiment Scope
+
+当前阶段不再继续扩大同质化方法矩阵。过去的 FOLDER / FolderHomo / FolderGainHomo / MARC / learnable-token 实验已经说明，简单增加压缩目标或继续堆训练变体收益很低。新的实验范围收缩到模型架构消融和诊断，重点回答三个问题：
+
+1. FOLDER-style 压缩中的 token 重要分应该从哪里来？
+2. gain / residual 分数是否真的对应检索有用信息？
+3. MMEB 全量结果中哪些子任务与 MaxSim 机制不匹配？
+
+为此在 `experiments/2026-07-01/` 下建立三个独立目录：
+
+| 目录 | 目标 |
+|---|---|
+| `探索重要分/` | 消融 post-MLP FOLDER 的 token importance 来源。 |
+| `增益分/` | 固定其他变量，只消融 coarse-to-fine residual gain definition。 |
+| `MMEB全量/` | 单独管理 MMEB full eval、metric 统一和子任务分析。 |
+
+### 2026-07-01A: 探索重要分
+
+传统 VLM token compression 通常从 VLM 内部拿重要性信号，例如 vision encoder attention、LLM attention、CLS-to-patch attention、dominant token attention，或者 learned saliency。典型思路包括 PruMerge 的 attention-based important token selection、VisionZip 的 dominant/contextual token selection，以及 attention/entropy/centrality 风格的 token saliency。
+
+但当前 MURE-V2 的成功路线是在 `custom_text_proj` 之后做 MLP-post compression。此时 token 已经进入 retrieval embedding space，直接使用 VLM 内部注意力未必和 MaxSim 检索目标对齐。因此新的重要分实验保持 FolderHomo residual160 / V1 的训练和压缩接口不变，只替换 FOLDER merge 前的 protection / importance score。
+
+固定对照：
+
+| Baseline | Budget | ViDoReV1 | ViDoReV2 | MMEB | Avg |
+|---|---:|---:|---:|---:|---:|
+| FolderHomo residual160 / V1 | 160/160/160 | 89.34 | 60.28 | 76.43 | 75.35 |
+
+实验原则：
+
+```text
+相似分不动：仍然使用 FOLDER 的 post-MLP token cosine matching。
+预算不动：固定 160/160/160，即总视觉 token 480。
+训练配置不动：沿用 residual160 的 native Qwen2.5 / LoRA / custom_text_proj / compressor 联合训练。
+唯一变量：token-level importance/protect score。
+目标：找到超过 residual160 的 importance 设计。
+```
+
+已实现独立实验目录：
+
+```text
+experiments/2026-07-01/探索重要分/
+```
+
+selected importance mode：
+
+| Priority | Mode | 说明 | 目的 |
+|---|---|---|---|
+| P0 | `mlp` / `mlp_saliency` | 原 FolderHomo 的 learned MLP saliency head。 | 作为当前基线，并检查独立实现是否对齐 residual160。 |
+| P0 | `mha_attn` / `mha_received_attn` | 使用 post-MLP scorer 内部 MHA 的 received-attention 作为重要分。 | 直接测试增强矩阵 / token-token attention 是否能替代额外 saliency MLP。 |
+| P0 | `learned_gate` | 直接使用 scorer gate head 的 sigmoid 输出。 | 与 saliency/attention 差异最大，测试 value/retention gate 是否足以表达 token 保留重要性。 |
+| P1 | `mha_pagerank` | 在 scorer 内部 MHA attention graph 上做 PageRank centrality。 | 若 P0 表明 attention 有希望，再测试二阶 graph centrality 是否比 raw attention 更稳。 |
+
+暂不优先跑 `mha_entropy_confidence`。它仍保留在代码中，但与 `mha_attn` 同属 attention score 的去噪变体，差异性不足，时间紧张时不应进入第一批 8 卡实验。
+
+`coverage_gain` 不放在此表中。它回答的是“相对已有 coarse evidence 的覆盖/增益”，属于 `增益分/`，不是本组 importance-only ablation。
+
+详细实验目的、变量控制、运行命令、结果表和结论模板统一维护在 `experiments/2026-07-01/探索重要分/README.md`，避免主 ledger 重复。
+
+### 2026-07-01B: 增益分 Only
+
+这一组不再继续加 coverage/MMR/residual-mass 组合项，也不把 top-k heuristic 作为主线，而是把问题收缩为：`1 - max similarity` 是否真的是最好的 residual gain proxy。根据近两年 VLM/LMM token compression 调研，新的 gain 必须满足 relative + trainable + coarse-anchor-aware。变量控制如下：
+
+```text
+重要分不动：沿用 FolderHomo V1 的 MLP saliency。
+相似分不动：仍然使用 FOLDER 的 post-MLP token cosine matching。
+预算不动：固定 160/160/160。
+唯一变量：coarse-to-fine gain definition。
+```
+
+固定对照仍是 FolderHomo residual160 / V1：ViDoReV1 89.34 / ViDoReV2 60.28 / MMEB 76.43 / Avg 75.35。
+
+selected gain mode：
+
+| Priority | Mode | 说明 | 目的 |
+|---|---|---|---|
+| Control | `hard_max` | 原始 `1 - max_a cos(x, a)`。 | 复现当前 gain baseline。 |
+| P0 | `learned_metric_residual` | 在可训练 query/key metric 上估计 soft residual coverage。 | 保留 `1-max` 的相对增益思想，但学习更适合检索 token 的相似度度量。 |
+| P0 | `learned_anchor_gate` | Cross-anchor context + MLP 预测 gain。 | 让模型显式判断相似但仍有用的 OCR/layout 重复证据。 |
+| P1 | `learned_reconstruction_residual` | 用 coarse anchors 重构当前 token 后取残差。 | 测试 coarse-to-fine absorption / reconstruction gain；参数更多，优先级略低。 |
+
+旧 `geo_coverage` / `mmr` / `residual_mass` 结果保留为负向或边界 ablation，不进入本轮 P0：它们改变的是 coverage/diversity/budget allocation，而不是对 `1-max similarity` 的可训练平行替换。`soft_topk_residual` 和 `anchor_subspace_residual` 也不进入 P0，因为它们仍依赖 top-k heuristic。详细实验目的、变量控制、运行命令、结果表和引用统一维护在 `experiments/2026-07-01/增益分/README.md`。
+
+### 2026-07-01C: MMEB 全量
+
+这一组使用当前 FolderHomo/FOLDER 主模型，目标是沿用 MRL-main 的 full-train / full-eval 数据口径检查 MMEB 全量任务。它的核心动机是重新验证 MaxSim 非对称性问题：直接用 MRL-main 做 MMEB full setting 时效果很差，原因很可能是 late-interaction MaxSim 更适合短 query 对长 document，而 MMEB 的 query 端也可能包含图像，query 侧视觉 token 过长后会变成多配多匹配，冗余局部 token 和 spurious matching 会放大噪声。FolderHomo 当前已经把多粒度视觉 token 压到 `160+160+160=480`，因此需要重新跑 MMEB full eval，判断视觉 token 压缩是否能缓解 MRL-main 暴露出的这个问题。独立目录：
+
+```text
+experiments/2026-07-01/MMEB全量/
+```
+
+固定设置：
+
+```text
+训练入口：experiments/exp_stagecompress/folder_homo/train_folder_homo.py
+模型：FolderHomo / FOLDER, 160/160/160
+训练配置：configs/train/moca_data_ratios_v3_full.yaml
+评测配置：configs/eval/test_data_mast_mmeb_v3.yaml
+主指标：recall_at_1
+分析维度：IND/OOD + Classification/VQA/Retrieval/Visual Grounding
+```
+
+补充两个 eval-only 非对称预算实验：
+
+| 优先级 | 实验 | Query 有图像时 | Target/Doc 端 | 目的 |
+|---|---|---|---|---|
+| P0 | `asym_q80_doc160` | `80/80/80` | `160/160/160` | 中等压缩 query image tokens，测试是否更接近短 query 场景。 |
+| P1 | `asym_q40_doc160` | `40/40/40` | `160/160/160` | 强压缩 query image tokens，测试 MaxSim 非对称性是否进一步恢复或信息损失过大。 |
+
+该目录提供 `run_train_full.sh`、`eval_mmeb_full.sh`、`eval_mmeb_asym_query.sh`、`smoke_train_eval.sh` 和 `analyze_mmeb.py`。它用于回答压缩后的 FolderHomo 是否已经足够回到 MMEB full setting，以及当前 FolderHomo 在 MMEB 全量中哪些子任务与 MaxSim late-interaction 机制匹配，哪些子任务仍然更像多配多/图像 query 场景，因此不应作为当前 FolderHomo 主线的核心优化目标。详细命令和解释维护在 `experiments/2026-07-01/MMEB全量/README.md`。

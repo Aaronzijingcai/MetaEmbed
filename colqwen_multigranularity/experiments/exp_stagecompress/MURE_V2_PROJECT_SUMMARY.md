@@ -299,7 +299,44 @@ native Qwen2.5VL / ColQwen2.5 base
 
 当前判断：这些补充实验都没有超过 FolderHomo residual160 的 75.35 Avg，因此主方法暂不替换。`geo_coverage` 更适合作为“增益定义方式”的负向或边界 ablation：coverage-based residual selection 可行，但对 ViDoReV2 不够稳。`80/80/80` 将 visual token 压到 240 后 Avg 降到 73.02，主要问题同样是 ViDoReV2，下限可接受但不作为主结果。
 
-## 9. strategy3 状态
+## 9. 2026-07-01 新实验收缩
+
+当前判断是：继续扩更多同质化 heuristic 的收益不高，下一步应收缩为模型架构消融，验证 FOLDER-style merge 中“重要分”和“增益分”到底应该从哪里来。
+
+新实验目录：
+
+```text
+experiments/2026-07-01/
+├── 探索重要分/
+├── 增益分/
+└── MMEB全量/
+```
+
+第一组已落地为独立代码：`experiments/2026-07-01/探索重要分/`。它以 FolderHomo residual160 / V1 为唯一对照，固定 `160/160/160` token budget 和现有 4k 训练配置，只替换 merge 前的 token-level importance/protect score。目标是超过 residual160 已有结果：ViDoReV1 89.34 / ViDoReV2 60.28 / MMEB 76.43 / Avg 75.35。
+
+| 优先级 | 方案 | 重要分来源 | 目的 |
+|---|---|---|---|
+| P0 | `mlp` / `mlp_saliency` | post-MLP token 上额外 saliency head | 复现当前 FolderHomo V1 风格 baseline |
+| P0 | `mha_attn` / `mha_received_attn` | scorer 内部 MHA 的 received-attention | 直接测试增强矩阵中的 token-token attention 是否能替代 saliency MLP |
+| P0 | `learned_gate` | scorer gate head 的 sigmoid 输出 | 测试 token value/retention gate 是否足以作为轻量重要分 |
+| P1 | `mha_pagerank` | scorer 内部 MHA attention graph 的 PageRank centrality | 若 attention 有希望，再测试二阶 graph centrality 是否更稳定 |
+
+实验定位：不再证明 FOLDER 是否可行，而是证明 FOLDER 的 importance/protect signal 应该如何设计。相似分保持不变，仍然使用 FOLDER 的 post-MLP token cosine matching。详细目的、变量控制、命令、结果表和结论模板见 `experiments/2026-07-01/探索重要分/README.md`。
+
+第二组已落地为独立代码：`experiments/2026-07-01/增益分/`。它同样以 FolderHomo residual160 / V1 为唯一对照，固定 `160/160/160` token budget、固定 MLP 重要分、固定 FOLDER cosine merge，只替换 coarse-to-fine residual gain 定义。核心问题是原始 `gain = 1 - max_a cos(x, a)` 是否过于依赖单个 nearest coarse anchor。根据近两年 VLM/LMM token compression 调研，这一组不再主推 top-k heuristic，而是测试 relative + trainable + coarse-anchor-aware 的 gain 平替。
+
+| 优先级 | 方案 | 增益分定义 | 目的 |
+|---|---|---|---|
+| Control | `hard_max` | `1 - max similarity` | 复现当前 FolderHomo V1 gain baseline |
+| P0 | `learned_metric_residual` | 可训练 query/key metric 上的 soft residual coverage | 保留 `1-max` 的相对增益思想，但学习更适合检索 token 的相似度度量 |
+| P0 | `learned_anchor_gate` | Cross-anchor context + MLP 预测 gain | 让模型显式判断相似但仍有用的 OCR/layout 重复证据 |
+| P1 | `learned_reconstruction_residual` | 用 coarse anchors 重构当前 token 后取残差 | 测试 coarse-to-fine absorption / reconstruction gain，但参数更多，优先级略低 |
+
+旧的 `geo_coverage`、`mmr`、`residual_mass` 不作为本轮主变量：它们分别引入 coverage/diversity/budget allocation 加项，不是对 `1-max similarity` 的平行替换，并且已有 4k 结果没有超过 residual160。详细设计、命令、结果表和引用见 `experiments/2026-07-01/增益分/README.md`。
+
+第三组已落地为独立代码：`experiments/2026-07-01/MMEB全量/`。它使用当前 FolderHomo/FOLDER 主模型，不是 MRL-main 模型；“沿用 MRL-main”只指 full train / full eval 数据口径。这个实验的动机来自 MRL-main 在 MMEB full setting 上效果很差：MaxSim late interaction 更适合短 query 对长 document 的非对称匹配，但 MMEB 的 query 端也可能包含图像，导致 query 侧视觉 token 过长、多配多噪声变强。现在 FolderHomo 已经把多粒度视觉 token 压到 `160+160+160=480`，因此需要重新验证视觉 token 压缩是否能缓解这种 MaxSim 非对称性问题。默认用 FolderHomo `160/160/160`、`configs/train/moca_data_ratios_v3_full.yaml` 训练，并在 `configs/eval/test_data_mast_mmeb_v3.yaml` 上做 MMEB full eval。此外新增两个 eval-only 非对称预算实验：当 query 端有图像时分别压到 `80/80/80` 和 `40/40/40`，target/doc 端保持 `160/160/160`，用于测试是否能更明确地恢复短 query 对长 document 的 MaxSim 使用形态。该目录还提供 smoke 训练/评测和 MMEB 结果分组分析，用于判断 MaxSim 在 Classification / VQA / Retrieval / Visual Grounding 以及 IND/OOD 任务上的适配边界。详细命令见 `experiments/2026-07-01/MMEB全量/README.md`。
+
+## 10. strategy3 状态
 
 `strategy3_prumerge` 已经是完成的 MLP-post 历史参考，不是当前训练任务。
 
@@ -309,7 +346,7 @@ native Qwen2.5VL / ColQwen2.5 base
 
 它证明剪枝+合并是可行方向，但当前更强的主线是 FOLDER -> FolderHomo -> Global-Guided HomoFolder。
 
-## 10. 论文故事建议
+## 11. 论文故事建议
 
 建议按下面逻辑写：
 
@@ -333,7 +370,7 @@ MURE-V2 identifies cross-granularity homogeneity as a key redundancy source in m
 MURE-V2 发现多粒度视觉文档检索中存在跨粒度同质化冗余，并提出可训练的 residual MRL 压缩机制，在保留真实视觉证据和 MaxSim 多向量检索框架的同时，降低 token 数量并提升检索稳定性。
 ```
 
-## 11. 风险与待补充
+## 12. 风险与待补充
 
 | 风险 | 原因 | 动作 |
 |---|---|---|
@@ -344,7 +381,7 @@ MURE-V2 发现多粒度视觉文档检索中存在跨粒度同质化冗余，并
 | novelty 需要谨慎 | 可能已有多图压缩相关工作 | claim 限定为 query-free cross-granularity multi-vector VDR |
 | learnable token 负结果解释 | reviewer 可能质疑训练不足 | 作为对照和动机，不作为攻击重点 |
 
-## 12. 近期推进计划
+## 13. 近期推进计划
 
 | 优先级 | 动作 | 目的 |
 |---|---|---|
@@ -356,7 +393,7 @@ MURE-V2 发现多粒度视觉文档检索中存在跨粒度同质化冗余，并
 | P2 | 模型确定后再做 token budget 研究 | 构建质量/成本 frontier |
 | P2 | 做 ViDoReV2 / MMEB badcase | 解释 residual compression 帮助和失效位置 |
 
-## 13. 当前推荐结论
+## 14. 当前推荐结论
 
 当前阶段最稳的结论是：
 
@@ -375,7 +412,7 @@ LLM LoRA + projection + compressor 必须联合训练。
 ```
 
 
-## 14. 后续研究决策矩阵（2026-06-15）
+## 15. 后续研究决策矩阵（2026-06-15）
 
 当前后续路线不应继续无差别扩大实验矩阵，而应围绕两个核心变量决策：
 
@@ -401,7 +438,7 @@ LLM LoRA + projection + compressor 必须联合训练。
 纯 learned abstraction 难以替代真实视觉证据。
 ```
 
-## 15. 下一阶段执行顺序（2026-06-15）
+## 16. 下一阶段执行顺序（2026-06-15）
 
 `geo_coverage` 已完成 full eval，后续应继续补齐剩余增益同质化结构，并在确定最强结构后再做预算缩放。推荐顺序：
 
