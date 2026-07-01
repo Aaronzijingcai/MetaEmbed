@@ -21,11 +21,10 @@
 | 文件 | 作用 |
 | --- | --- |
 | `run_train_full.sh` | FolderHomo full train launcher，默认使用 `configs/train/moca_data_ratios_v3_full.yaml` 和 `160/160/160`。 |
-| `eval_mmeb.py` | 复用 `experiments/exp_stagecompress/folder_homo/eval_folder_homo.py` 的模型加载逻辑，只负责 MMEB full/smoke eval。 |
+| `eval_mmeb.py` | 复用 `experiments/exp_stagecompress/folder_homo/eval_folder_homo.py` 的模型加载逻辑，只负责 MMEB full eval。 |
 | `eval_mmeb_full.sh` | MMEB full eval launcher，默认输出 `mmeb_full.json` 和 `mmeb_full_summary.json`。 |
 | `eval_mmeb_asym_query.sh` | 用同一个 checkpoint 跑 query-image asymmetric budget：`80/80/80` 和 `40/40/40`。 |
 | `analyze_mmeb.py` | 对 MMEB eval json 按 IND/OOD、Classification/VQA/Retrieval/Visual Grounding 聚合。 |
-| `smoke_train_eval.sh` | 单卡 2-step 训练 + 小 MMEB 子集评测，用于服务器 smoke。 |
 
 ## 训练配置
 
@@ -85,9 +84,9 @@ ONLY_EVAL_KEYWORDS="MMEB-eval-VisDial-beir MMEB-eval-WebQA-beir MMEB-eval-MSCOCO
 CHECKPOINT=... bash eval_mmeb_full.sh
 ```
 
-## Query 端非对称压缩
+## Query 端非对称压缩（历史 eval-only 入口）
 
-这两个补充实验不重新训练模型，只在 MMEB eval 时改变 query 端预算：
+这一节是早期 eval-only 入口，已不作为最新 7 组正式实验口径。最新口径见上面的训练阶段 MMEB budget 实验。这里两个补充实验不重新训练模型，只在 MMEB eval 时改变 query 端预算：
 
 | 实验 | Query 有图像时 | Target/Doc 端 | 目的 |
 | --- | --- | --- | --- |
@@ -110,37 +109,54 @@ ASYM_QUERY_IMAGE_BUDGETS="40 40 40" CHECKPOINT=... bash eval_mmeb_full.sh
 
 实现细节：`eval_mmeb.py` 在模型 `forward(is_query=True)` 且 batch 存在 `pixel_values/image_grid_thw` 时，临时把 FolderHomo block budgets 切到 query budget；forward 结束后立即恢复 `160/160/160`。因此 document/target 端始终使用原始 `160/160/160`，文本 query 也不受影响。
 
-## Smoke
+## 临时检查代码清理
 
-Smoke 默认：
+临时检查训练和测试代码及 run 产物已删除；正式进度请看 `PROGRESS.md`。
 
-```text
-MAX_STEPS=2
-SAVE_STEPS=2
-NUM_GPUS=1
-SUBSET_CONFIG=configs/train/moca_data_ratios_smoke_cirr.yaml
-EVAL_MODE=smoke
-ONLY_EVAL_KEYWORDS=MMEB-eval-VisDial-beir
-SMOKE_EVAL_MAX_QUERIES=2
-SMOKE_EVAL_MAX_LOCAL_DIDS=8
-```
+## 2026-07-01 更新：训练阶段的 7 组 MMEB budget 实验
 
-运行：
+MMEB budget experiments keep `MAX_STEPS=4000` by default and use `_4k` run-name suffixes. This is intentionally different from the homogeneity experiments, whose formal launcher defaults to 3k steps.
+
+
+最新口径不再把 query-side asymmetric compression 当作 eval-only trick，而是在训练阶段就区分 query/doc 预算。实现已单独放在本目录，不改 `exp_stagecompress/folder_homo` 主线：
+
+| 文件 | 作用 |
+| --- | --- |
+| `config_mmeb_budget.py` | MMEB query/doc 双预算配置。 |
+| `modeling_mmeb_budget.py` | 从 FolderHomo 模型代码复制出的本地版本，`forward(is_query=True)` 且 query batch 有图像时使用 query budget，doc/target/negative 使用 doc budget。 |
+| `loss_mmeb_budget.py` | 训练 loss 的 MaxSim group mask 同步区分 query budget 和 doc budget，避免训练阶段只改模型、不改 mask。 |
+| `train_mmeb_budget.py` / `run_train_budget.sh` | 单独的 MMEB budget 训练入口。 |
+| `eval_mmeb_budget.py` / `eval_mmeb_budget_full.sh` | 单独的 MMEB budget 验证入口，和训练使用同一套 query/doc budget。 |
+
+7 组正式实验为：
+
+| 实验 | Query 有图像时 | Target/Doc 有图像时 | 说明 |
+| --- | --- | --- | --- |
+| `sym160` | `160/160/160` | `160/160/160` | query/doc 同质压缩，不考虑 MaxSim 非对称性。 |
+| `sym80` | `80/80/80` | `80/80/80` | query/doc 同质压缩。 |
+| `sym40` | `40/40/40` | `40/40/40` | query/doc 同质压缩。 |
+| `sym20` | `20/20/20` | `20/20/20` | query/doc 同质压缩。 |
+| `asym_q80_d160` | `80/80/80` | `160/160/160` | MaxSim 非对称性：query 短、target/doc 长。 |
+| `asym_q40_d160` | `40/40/40` | `160/160/160` | MaxSim 非对称性：query 更短。 |
+| `asym_q20_d160` | `20/20/20` | `160/160/160` | MaxSim 非对称性：query 最短。 |
+
+运行单组训练：
 
 ```bash
 cd /MURE-V2/code/MetaEmbed/colqwen_multigranularity/experiments/2026-07-01/MMEB全量
-bash smoke_train_eval.sh
+QUERY_BUDGETS="80 80 80" DOC_BUDGETS="160 160 160" \
+RUN_NAME=folder_homo_mmeb_budget_asym_q80_d160_4k bash run_train_budget.sh
 ```
 
-Smoke 只验证：
+运行单组验证：
 
-1. FolderHomo 训练入口是否能启动。
-2. checkpoint 是否能被 `eval_mmeb.py` 加载。
-3. MMEB 的 `local-did` 候选集截断后仍能正常计算 recall。
-4. 非对称 query budget 参数是否能被 `eval_mmeb.py` 接收。
-5. 分组分析脚本是否能读 eval json。
+```bash
+QUERY_BUDGETS="80 80 80" DOC_BUDGETS="160 160 160" \
+CHECKPOINT=runs/folder_homo_mmeb_budget_asym_q80_d160_4k/checkpoint-4000 \
+bash eval_mmeb_budget_full.sh
+```
 
-Smoke 指标不用于汇报。
+7 组正式训练/验证命令和 TODO 已移到 `PROGRESS.md` 维护。
 
 ## 论文写法
 

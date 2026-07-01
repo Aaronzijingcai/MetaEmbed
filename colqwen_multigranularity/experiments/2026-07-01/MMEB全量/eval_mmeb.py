@@ -105,8 +105,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--v2-do-padding", action="store_true", dest="v2_do_padding")
     parser.add_argument("--no-v2-do-padding", action="store_false", dest="v2_do_padding")
     parser.add_argument("--only-eval-keywords", type=str, nargs="*", default=None)
-    parser.add_argument("--smoke-eval-max-queries", type=int, default=0)
-    parser.add_argument("--smoke-eval-max-local-dids", type=int, default=0)
+    parser.add_argument("--eval-max-queries", type=int, default=0)
+    parser.add_argument("--eval-max-local-dids", type=int, default=0)
     parser.set_defaults(use_simple_prompt=True, resize_crops_to_page=True, use_v2_retriever=True, v2_do_padding=True)
     return parser.parse_args()
 
@@ -174,7 +174,10 @@ def _filter_loader(eval_dataset_loader: dict, keywords: Optional[list[str]]) -> 
 
 def _select_dataset_rows(dataset, indices):
     if hasattr(dataset, "select"):
-        return dataset.select(indices)
+        selected = dataset.select(indices, keep_in_memory=True)
+        if getattr(selected, "_indices", None) is not None and hasattr(selected, "flatten_indices"):
+            selected = selected.flatten_indices(keep_in_memory=True)
+        return selected
     return [dataset[index] for index in indices]
 
 
@@ -276,8 +279,8 @@ def main() -> None:
     eval_dataset_loader = _filter_loader(eval_dataset_loader, args.only_eval_keywords)
     eval_dataset_loader = _build_limited_loader(
         eval_dataset_loader,
-        max_queries=int(args.smoke_eval_max_queries),
-        max_local_dids=int(args.smoke_eval_max_local_dids),
+        max_queries=int(args.eval_max_queries),
+        max_local_dids=int(args.eval_max_local_dids),
     )
     no_eval_keywords = [] if args.include_multilingual else None
     is_rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
@@ -295,8 +298,8 @@ def main() -> None:
                     "eval_config": args.eval_config,
                     "avg_metric": args.avg_metric,
                     "only_eval_keywords": args.only_eval_keywords,
-                    "smoke_eval_max_queries": args.smoke_eval_max_queries,
-                    "smoke_eval_max_local_dids": args.smoke_eval_max_local_dids,
+                    "eval_max_queries": args.eval_max_queries,
+                    "eval_max_local_dids": args.eval_max_local_dids,
                 },
                 ensure_ascii=False,
             )

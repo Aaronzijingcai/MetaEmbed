@@ -89,21 +89,12 @@ FOLDER 原本包含两个分数：
 | Folder alpha | `1.0` |
 | Training data | MoCa no-mmE5 text-query-focus config |
 | Eval data | ViDoReV1 / ViDoReV2 / MMEB standard 3-set config |
-| Max steps | 默认 `4000` |
+| Max steps | 默认 `3000` |
 | Batch setting | 8 GPU, per-device train batch size 4 |
 
 默认训练命令已经固定 `BUDGETS=160 160 160`，不需要额外指定预算。
 
-Smoke 训练和测试：
-
-```bash
-cd /MURE-V2/code/MetaEmbed/colqwen_multigranularity
-
-IMPORTANCE_MODE=mlp \
-  bash experiments/2026-07-01/探索重要分/smoke_train_eval.sh
-```
-
-默认 smoke 设置为单卡、2 training steps、保存 `checkpoint-2`，随后用 `EVAL_MODE=smoke` 评测 1 个 ViDoReV1 子集、1 个 ViDoReV2 子集和 1 个 MMEB 子集，每个子集只取少量 query/corpus。它只用于验证训练保存、`folder_importance.pt` 加载、评测入口和 smoke 限流是否正常，不用于汇报指标。
+临时检查训练和测试代码已删除；正式进度请看 `PROGRESS.md`。
 
 P0 训练：
 
@@ -132,7 +123,7 @@ IMPORTANCE_MODE=mha_pagerank \
 ```bash
 IMPORTANCE_MODE=mha_attn \
   bash experiments/2026-07-01/探索重要分/eval_3sets.sh \
-  experiments/2026-07-01/探索重要分/runs/folder_importance_v1_mha_attn_b160_160_160_4k/checkpoint-4000
+  experiments/2026-07-01/探索重要分/runs/folder_importance_v1_mha_attn_b160_160_160_3k/checkpoint-3000
 ```
 
 ## 5. 实验结果
@@ -169,7 +160,6 @@ IMPORTANCE_MODE=mha_attn \
 | `eval_importance.py` | 独立评测入口 |
 | `run_train.sh` | 8-GPU 训练脚本 |
 | `eval_3sets.sh` | ViDoReV1 / ViDoReV2 / MMEB 评测脚本 |
-| `smoke_train_eval.sh` | 单卡 smoke 训练 + smoke 评测链路检查 |
 
 ## References
 

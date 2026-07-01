@@ -55,3 +55,8 @@ bash experiments/exp_stagecompress/folder_homo/run_train.sh
 ```
 
 Formal command templates are in `../FORMAL_8GPU_COMMANDS.md`.
+
+
+## Default launcher policy
+
+The formal homogeneity launcher `run_train.sh` defaults to `MAX_STEPS=3000` and names the run with a `_3k` suffix. The paired `eval_3sets.sh` default checkpoint is `checkpoint-3000`. Override `MAX_STEPS`/`RUN_NAME` explicitly only for sensitivity runs.

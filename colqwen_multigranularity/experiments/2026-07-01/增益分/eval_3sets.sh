@@ -74,18 +74,8 @@ VIDORE_V1_KEYWORDS=(syntheticDocQA_energy syntheticDocQA_healthcare_industry syn
 VIDORE_V2_KEYWORDS=(esg_reports_human_labeled_v2 esg_reports_v2_multilingual esg_reports_v2 biomedical_lectures_v2 biomedical_lectures_v2_multilingual economics_reports_v2 economics_reports_v2_multilingual)
 MMEB_KEYWORDS=(MMEB-eval-VisDial-beir MMEB-eval-WebQA-beir MMEB-eval-VisualNews_t2i-beir MMEB-eval-MSCOCO_t2i-beir)
 
-if [[ "$EVAL_MODE" == "smoke" ]]; then
-  EVAL_MAX_QUERIES=${EVAL_MAX_QUERIES:-${SMOKE_EVAL_MAX_QUERIES:-4}}
-  EVAL_MAX_CORPUS=${EVAL_MAX_CORPUS:-${SMOKE_EVAL_MAX_CORPUS:-16}}
-  NUM_WORKERS=${NUM_WORKERS:-${SMOKE_EVAL_NUM_WORKERS:-0}}
-  VIDORE_V1_KEYWORDS=(syntheticDocQA_energy)
-  VIDORE_V2_KEYWORDS=(esg_reports_human_labeled_v2)
-  MMEB_KEYWORDS=(MMEB-eval-VisDial-beir)
-else
-  EVAL_MAX_QUERIES=${EVAL_MAX_QUERIES:-0}
-  EVAL_MAX_CORPUS=${EVAL_MAX_CORPUS:-0}
-  NUM_WORKERS=${NUM_WORKERS:-4}
-fi
+EVAL_MAX_QUERIES=${EVAL_MAX_QUERIES:-0}
+EVAL_MAX_CORPUS=${EVAL_MAX_CORPUS:-0}
 
 LOAD_ARGS=(--adapter-path "$CHECKPOINT")
 if [[ -f "$CHECKPOINT/pytorch_model.bin" ]]; then
@@ -140,8 +130,8 @@ run_eval() {
     --batch-passage "$BATCH_PASSAGE" \
     --batch-score "$BATCH_SCORE" \
     --num-workers "$NUM_WORKERS" \
-    --smoke-eval-max-queries "$EVAL_MAX_QUERIES" \
-    --smoke-eval-max-corpus "$EVAL_MAX_CORPUS" \
+    --eval-max-queries "$EVAL_MAX_QUERIES" \
+    --eval-max-corpus "$EVAL_MAX_CORPUS" \
     "${COMMON_ARGS[@]}"
 }
 
