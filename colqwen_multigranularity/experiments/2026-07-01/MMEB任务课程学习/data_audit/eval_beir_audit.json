@@ -1,0 +1,1347 @@
+[
+  {
+    "dataset": "FashionIQ",
+    "queries": 1000,
+    "corpus": 5992,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list",
+      "img"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path",
+      "img"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 200,
+    "query_text_len_mean": 117.665,
+    "query_text_len_median": 117.0,
+    "corpus_text_len_mean": 27.0,
+    "corpus_text_len_median": 27.0,
+    "corpus_unique_text_ratio": 0.00016688918558077436,
+    "corpus_top_texts": {
+      "Represent the given image.\n": 5992
+    },
+    "sample_queries": [
+      "Find an image to match the fashion image and style note: Is shiny and silver with shorter sleeves and fit and flare.",
+      "Find an image to match the fashion image and style note: Is grey with black design and is a light printed short dress.",
+      "Find an image to match the fashion image and style note: Is a solid red color and shorter and tighter with more blue and..."
+    ],
+    "sample_corpus": [
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image."
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "Country211",
+    "queries": 1000,
+    "corpus": 211,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 43.0,
+    "query_text_len_median": 43.0,
+    "corpus_text_len_mean": 8.957345971563981,
+    "corpus_text_len_median": 8.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "Fiji": 1,
+      "Liechtenstein": 1,
+      "Solomon Islands": 1,
+      "Sint Maarten": 1,
+      "Colombia": 1
+    },
+    "sample_queries": [
+      "Identify the country depicted in the image",
+      "Identify the country depicted in the image",
+      "Identify the country depicted in the image"
+    ],
+    "sample_corpus": [
+      "Fiji",
+      "Liechtenstein",
+      "Solomon Islands",
+      "Sint Maarten",
+      "Colombia"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "CIRR",
+    "queries": 1000,
+    "corpus": 2197,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list",
+      "img"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path",
+      "img"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 200,
+    "query_text_len_mean": 132.205,
+    "query_text_len_median": 125.0,
+    "corpus_text_len_mean": 27.0,
+    "corpus_text_len_median": 27.0,
+    "corpus_unique_text_ratio": 0.0004551661356395084,
+    "corpus_top_texts": {
+      "Represent the given image.\n": 2197
+    },
+    "sample_queries": [
+      "Given an image, find a similar everyday image with the described changes: Show three bottles of soft drink.",
+      "Given an image, find a similar everyday image with the described changes: Fewer paper towels per pack.",
+      "Given an image, find a similar everyday image with the described changes: Two animals that are of a different species fr..."
+    ],
+    "sample_corpus": [
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image.",
+      "Represent the given image."
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "InfographicsVQA",
+    "queries": 1000,
+    "corpus": 1730,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 119.117,
+    "query_text_len_median": 116.0,
+    "corpus_text_len_mean": 10.947976878612717,
+    "corpus_text_len_median": 8.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "pinterest": 1,
+      "runny nose, cough, sore throat": 1,
+      "167,000": 1,
+      "$59.5b": 1,
+      "ebola, 224k": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: Which social platform has heavy female audience?",
+      "Represent the given image with the following question: Which three business types is Pinterest good for?",
+      "Represent the given image with the following question: Which two platforms are good for B2B companies?"
+    ],
+    "sample_corpus": [
+      "pinterest",
+      "runny nose, cough, sore throat",
+      "167,000",
+      "$59.5b",
+      "ebola, 224k"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "Visual7W",
+    "queries": 1000,
+    "corpus": 3480,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 82.818,
+    "query_text_len_median": 82.0,
+    "corpus_text_len_mean": 13.910632183908046,
+    "corpus_text_len_median": 13.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "Gray.": 1,
+      "To receive orders.": 1,
+      "Plates.": 1,
+      "Person with camera.": 1,
+      "A video game controller.": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: What color is the sidewalk?",
+      "Represent the given image with the following question: Where is the man sitting?",
+      "Represent the given image with the following question: What is in the photo?"
+    ],
+    "sample_corpus": [
+      "Gray.",
+      "To receive orders.",
+      "Plates.",
+      "Person with camera.",
+      "A video game controller."
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "GQA",
+    "queries": 1000,
+    "corpus": 6850,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 97.61,
+    "query_text_len_median": 95.0,
+    "corpus_text_len_mean": 32.67051094890511,
+    "corpus_text_len_median": 33.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "This is a parrot.": 1,
+      "Yes, there is a clock that is gold.": 1,
+      "Yes, there are both a bed and a picture.": 1,
+      "No, both the cap and the sign are blue.": 1,
+      "The girl smiles at the phone.": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: What is this bird called?",
+      "Represent the given image with the following question: What color is the helmet in the middle of the image?",
+      "Represent the given image with the following question: Is it an indoors or outdoors scene?"
+    ],
+    "sample_corpus": [
+      "This is a parrot.",
+      "Yes, there is a clock that is gold.",
+      "Yes, there are both a bed and a picture.",
+      "No, both the cap and the sign are blue.",
+      "The girl smiles at the phone."
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ChartQA",
+    "queries": 1000,
+    "corpus": 1601,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 115.183,
+    "query_text_len_median": 109.0,
+    "corpus_text_len_mean": 6.18738288569644,
+    "corpus_text_len_median": 5.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "14": 1,
+      "11.8": 1,
+      "10878": 1,
+      "[2003, 2004]": 1,
+      "Chinese": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: How many food item is shown in the bar graph?",
+      "Represent the given image with the following question: What is the difference in value between Lamb and Corn?",
+      "Represent the given image with the following question: How many bars are shown in the chart?"
+    ],
+    "sample_corpus": [
+      "14",
+      "11.8",
+      "10878",
+      "[2003, 2004]",
+      "Chinese"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "A-OKVQA",
+    "queries": 1000,
+    "corpus": 894,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 100.309,
+    "query_text_len_median": 97.0,
+    "corpus_text_len_mean": 7.546979865771812,
+    "corpus_text_len_median": 7.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "cigarette": 1,
+      "1000": 1,
+      "eleven": 1,
+      "i do": 1,
+      "malaysia": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: What is in the motorcyclist's mouth?",
+      "Represent the given image with the following question: Which number birthday is probably being celebrated?",
+      "Represent the given image with the following question: What best describes the pool of water?"
+    ],
+    "sample_corpus": [
+      "cigarette",
+      "1000",
+      "eleven",
+      "i do",
+      "malaysia"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ScienceQA",
+    "queries": 1000,
+    "corpus": 736,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 111.516,
+    "query_text_len_median": 106.0,
+    "corpus_text_len_mean": 24.203804347826086,
+    "corpus_text_len_median": 15.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "how steady a parachute with a 1 m vent was at 200 km per hour": 1,
+      "climate": 1,
+      "Bryum moss plants are made up of tiny units called cells.": 1,
+      "chirping": 1,
+      "Grenada": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: Which of the following could Gordon's test show?",
+      "Represent the given image with the following question: What is the name of the colony shown?",
+      "Represent the given image with the following question: Which of these organisms contains matter that was once part of th..."
+    ],
+    "sample_corpus": [
+      "how steady a parachute with a 1 m vent was at 200 km per hour",
+      "climate",
+      "Bryum moss plants are made up of tiny units called cells.",
+      "chirping",
+      "Grenada"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "OK-VQA",
+    "queries": 1000,
+    "corpus": 2555,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 99.164,
+    "query_text_len_median": 96.0,
+    "corpus_text_len_mean": 7.187084148727984,
+    "corpus_text_len_median": 7.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "race": 1,
+      "bake it": 1,
+      "dry hand": 1,
+      "pun": 1,
+      "philadelphia": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: What sport can you use this for?",
+      "Represent the given image with the following question: Name the type of plant this is?",
+      "Represent the given image with the following question: What toy is this?"
+    ],
+    "sample_corpus": [
+      "race",
+      "bake it",
+      "dry hand",
+      "pun",
+      "philadelphia"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "DocVQA",
+    "queries": 1000,
+    "corpus": 4463,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 103.022,
+    "query_text_len_median": 101.0,
+    "corpus_text_len_mean": 14.876316379117187,
+    "corpus_text_len_median": 11.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "0.28": 1,
+      "1992": 1,
+      "PROFESSOR": 1,
+      "Mr. Heeley": 1,
+      "18.40": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: What is the ‘actual’ value per 1000, during the year 1975?",
+      "Represent the given image with the following question: What is name of university?",
+      "Represent the given image with the following question: What is the name of the company?"
+    ],
+    "sample_corpus": [
+      "0.28",
+      "1992",
+      "PROFESSOR",
+      "Mr. Heeley",
+      "18.40"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "TextVQA",
+    "queries": 1000,
+    "corpus": 3343,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 91.27,
+    "query_text_len_median": 89.0,
+    "corpus_text_len_mean": 9.279389769667963,
+    "corpus_text_len_median": 8.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "dakota": 1,
+      "rose": 1,
+      "cognac": 1,
+      "bevi": 1,
+      "12:39": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: what is the brand of this camera?",
+      "Represent the given image with the following question: what does the small white text spell?",
+      "Represent the given image with the following question: what kind of beer is this?"
+    ],
+    "sample_corpus": [
+      "dakota",
+      "rose",
+      "cognac",
+      "bevi",
+      "12:39"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "VizWiz",
+    "queries": 1000,
+    "corpus": 1436,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 91.502,
+    "query_text_len_median": 81.0,
+    "corpus_text_len_mean": 12.405292479108635,
+    "corpus_text_len_median": 11.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "night time": 1,
+      "tonic wine": 1,
+      "assorted": 1,
+      "8:43": 1,
+      "sauerkraut": 1
+    },
+    "sample_queries": [
+      "Represent the given image with the following question: Can you tell me what this medicine is please?",
+      "Represent the given image with the following question: What is the title of this book?",
+      "Represent the given image with the following question: Which one is the blue one?"
+    ],
+    "sample_corpus": [
+      "night time",
+      "tonic wine",
+      "assorted",
+      "8:43",
+      "sauerkraut"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ImageNet-1K",
+    "queries": 1000,
+    "corpus": 1000,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 45.0,
+    "query_text_len_median": 45.0,
+    "corpus_text_len_mean": 20.676,
+    "corpus_text_len_median": 16.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "coucal": 1,
+      "artichoke, globe artichoke": 1,
+      "disk brake, disc brake": 1,
+      "Sealyham terrier, Sealyham": 1,
+      "washbasin, handbasin, washbowl, lavabo, wash-hand basin": 1
+    },
+    "sample_queries": [
+      "Represent the given image for classification",
+      "Represent the given image for classification",
+      "Represent the given image for classification"
+    ],
+    "sample_corpus": [
+      "coucal",
+      "artichoke, globe artichoke",
+      "disk brake, disc brake",
+      "Sealyham terrier, Sealyham",
+      "washbasin, handbasin, washbowl, lavabo, wash-hand basin"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "SUN397",
+    "queries": 1000,
+    "corpus": 397,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 38.0,
+    "query_text_len_median": 38.0,
+    "corpus_text_len_mean": 11.896725440806046,
+    "corpus_text_len_median": 11.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "firing range indoor": 1,
+      "raft": 1,
+      "sandbox": 1,
+      "waterfall fan": 1,
+      "volleyball court indoor": 1
+    },
+    "sample_queries": [
+      "Identify the scene shown in the image",
+      "Identify the scene shown in the image",
+      "Identify the scene shown in the image"
+    ],
+    "sample_corpus": [
+      "firing range indoor",
+      "raft",
+      "sandbox",
+      "waterfall fan",
+      "volleyball court indoor"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "VOC2007",
+    "queries": 1000,
+    "corpus": 20,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 39.0,
+    "query_text_len_median": 39.0,
+    "corpus_text_len_mean": 5.75,
+    "corpus_text_len_median": 5.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "chair": 1,
+      "tvmonitor": 1,
+      "sofa": 1,
+      "horse": 1,
+      "bicycle": 1
+    },
+    "sample_queries": [
+      "Identify the object shown in the image",
+      "Identify the object shown in the image",
+      "Identify the object shown in the image"
+    ],
+    "sample_corpus": [
+      "chair",
+      "tvmonitor",
+      "sofa",
+      "horse",
+      "bicycle"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ImageNet-A",
+    "queries": 1000,
+    "corpus": 1000,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 45.0,
+    "query_text_len_median": 45.0,
+    "corpus_text_len_mean": 20.676,
+    "corpus_text_len_median": 16.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "Rottweiler": 1,
+      "Sussex spaniel": 1,
+      "robin, American robin, Turdus migratorius": 1,
+      "artichoke, globe artichoke": 1,
+      "groom, bridegroom": 1
+    },
+    "sample_queries": [
+      "Represent the given image for classification",
+      "Represent the given image for classification",
+      "Represent the given image for classification"
+    ],
+    "sample_corpus": [
+      "Rottweiler",
+      "Sussex spaniel",
+      "robin, American robin, Turdus migratorius",
+      "artichoke, globe artichoke",
+      "groom, bridegroom"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ImageNet-R",
+    "queries": 1000,
+    "corpus": 200,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 45.0,
+    "query_text_len_median": 45.0,
+    "corpus_text_len_mean": 8.8,
+    "corpus_text_len_median": 8.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "flute": 1,
+      "bell_pepper": 1,
+      "missile": 1,
+      "space_shuttle": 1,
+      "African_chameleon": 1
+    },
+    "sample_queries": [
+      "Represent the given image for classification",
+      "Represent the given image for classification",
+      "Represent the given image for classification"
+    ],
+    "sample_corpus": [
+      "flute",
+      "bell_pepper",
+      "missile",
+      "space_shuttle",
+      "African_chameleon"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  },
+  {
+    "dataset": "ObjectNet",
+    "queries": 1000,
+    "corpus": 113,
+    "qrels": 1000,
+    "query_columns": [
+      "qid",
+      "query_txt",
+      "query_img_path",
+      "query-id",
+      "local-did",
+      "query_img"
+    ],
+    "corpus_columns": [
+      "did",
+      "txt",
+      "corpus-id",
+      "img_path",
+      "query-id-list"
+    ],
+    "qrels_columns": [
+      "query-id",
+      "corpus-id",
+      "score"
+    ],
+    "query_text_col": "query_txt",
+    "corpus_text_col": "txt",
+    "query_image_cols": [
+      "query_img_path",
+      "query_img"
+    ],
+    "corpus_image_cols": [
+      "img_path"
+    ],
+    "query_has_image_first200": 200,
+    "corpus_has_image_first200": 0,
+    "query_text_len_mean": 39.0,
+    "query_text_len_median": 39.0,
+    "corpus_text_len_mean": 9.176991150442477,
+    "corpus_text_len_median": 8.0,
+    "corpus_unique_text_ratio": 1.0,
+    "corpus_top_texts": {
+      "tray": 1,
+      "bath towel": 1,
+      "paper towel": 1,
+      "hammer": 1,
+      "portable heater": 1
+    },
+    "sample_queries": [
+      "Identify the object shown in the image",
+      "Identify the object shown in the image",
+      "Identify the object shown in the image"
+    ],
+    "sample_corpus": [
+      "tray",
+      "bath towel",
+      "paper towel",
+      "hammer",
+      "portable heater"
+    ],
+    "pos_per_query": {
+      "count": 1000.0,
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "25%": 1.0,
+      "50%": 1.0,
+      "75%": 1.0,
+      "max": 1.0
+    }
+  }
+]

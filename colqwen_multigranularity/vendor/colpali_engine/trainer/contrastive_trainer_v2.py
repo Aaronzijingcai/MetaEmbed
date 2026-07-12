@@ -5,6 +5,7 @@
 # 3) disable random sampler to enable interleaved batching
 # 4) only gather for positive documents
 import inspect
+import os
 
 import types
 
@@ -140,6 +141,8 @@ class ContrastiveTrainerV2(Trainer):
         return None if tensor is None else tuple(tensor.shape)
 
     def _debug_batch_summary(self, inputs, query_outputs, doc_outputs, neg_doc_outputs=None):
+        if os.environ.get("MURE_TRAINER_DEBUG_BATCH", "").strip().lower() not in {"1", "true", "yes", "y"}:
+            return
         step = getattr(self.state, "global_step", -1)
         if step > 2:
             return
@@ -251,7 +254,7 @@ class ContrastiveTrainerV2(Trainer):
                 doc_outputs, doc_local_lens = pad_to_max_len_right(
                     doc_outputs, dist.get_world_size()
                 )
-                if getattr(self.state, "global_step", -1) <= 2:
+                if os.environ.get("MURE_TRAINER_DEBUG_BATCH", "").strip().lower() in {"1", "true", "yes", "y"} and getattr(self.state, "global_step", -1) <= 2:
                     print(
                         f"[debug-pad] step={getattr(self.state, 'global_step', -1)} rank={dist.get_rank()} "
                         f"doc_local_lens={[int(x.item()) for x in doc_local_lens]} padded_doc={tuple(doc_outputs.shape)}"
@@ -262,7 +265,7 @@ class ContrastiveTrainerV2(Trainer):
             doc_embeddings = gather_with_grad_torch(
                 doc_outputs
             )  # [B * num_gpus, Nd, D]
-            if getattr(self.state, "global_step", -1) <= 2:
+            if os.environ.get("MURE_TRAINER_DEBUG_BATCH", "").strip().lower() in {"1", "true", "yes", "y"} and getattr(self.state, "global_step", -1) <= 2:
                 print(
                     f"[debug-gather] step={getattr(self.state, 'global_step', -1)} rank={dist.get_rank()} "
                     f"gathered_doc={tuple(doc_embeddings.shape)}"

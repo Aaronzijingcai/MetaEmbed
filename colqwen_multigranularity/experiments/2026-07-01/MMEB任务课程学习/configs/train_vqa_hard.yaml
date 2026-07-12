@@ -1,0 +1,11 @@
+# Trainable VQA-like hard subsets available in configs/train/moca_data_ratios_v3_full.yaml.
+# Several low-score eval subsets such as GQA/TextVQA/ScienceQA/VizWiz are not present in
+# the current train config, so they are evaluated but not included here.
+
+InfographicsVQA: {"weight": 1.0, "num_samples": 50000}
+ChartQA: {"weight": 1.0, "num_samples": 50000}
+A-OKVQA: {"weight": 1.0, "num_samples": 50000}
+DocVQA: {"weight": 1.0, "num_samples": 50000}
+OK-VQA: {"weight": 1.0, "num_samples": 10000}
+Visual7W: {"weight": 1.0, "num_samples": 50000}
+

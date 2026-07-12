@@ -55,8 +55,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gain-scorer-dropout", type=float, default=0.1)
     parser.add_argument("--gain-debug-shapes", action="store_true", default=False)
     parser.add_argument("--only-eval-keywords", type=str, nargs="*", default=None)
-    parser.add_argument("--eval-max-queries", type=int, default=0)
-    parser.add_argument("--eval-max-corpus", type=int, default=0)
+    parser.add_argument("--smoke-eval-max-queries", type=int, default=0)
+    parser.add_argument("--smoke-eval-max-corpus", type=int, default=0)
     gain_args, remaining = parser.parse_known_args()
 
     original_argv = sys.argv
@@ -226,7 +226,7 @@ def _limit_eval_dataset(dataset: dict[str, Any], *, max_queries: int, max_corpus
     return {"queries": limited_queries, "corpus": limited_corpus, "qrels": qrels}
 
 
-def _build_limited_loader(eval_dataset_loader: dict, *, max_queries: int, max_corpus: int, dataset_format: str) -> dict:
+def _build_smoke_limited_loader(eval_dataset_loader: dict, *, max_queries: int, max_corpus: int, dataset_format: str) -> dict:
     if max_queries <= 0 and max_corpus <= 0:
         return eval_dataset_loader
     limited = {}
@@ -279,26 +279,26 @@ def main() -> None:
 
     beir_loader, mmeb_loader = base_eval._split_mixed_eval_loader(eval_dataset_loader)
     if args.dataset_format == "beir" and mmeb_loader and beir_loader:
-        beir_loader = _build_limited_loader(
+        beir_loader = _build_smoke_limited_loader(
             beir_loader,
-            max_queries=int(args.eval_max_queries),
-            max_corpus=int(args.eval_max_corpus),
+            max_queries=int(args.smoke_eval_max_queries),
+            max_corpus=int(args.smoke_eval_max_corpus),
             dataset_format="beir",
         )
-        mmeb_loader = _build_limited_loader(
+        mmeb_loader = _build_smoke_limited_loader(
             mmeb_loader,
-            max_queries=int(args.eval_max_queries),
-            max_corpus=int(args.eval_max_corpus),
+            max_queries=int(args.smoke_eval_max_queries),
+            max_corpus=int(args.smoke_eval_max_corpus),
             dataset_format="mmeb",
         )
         metrics = {}
         metrics.update(_run_eval(args, model, processor, beir_loader, dataset_format="beir", avg_metric=args.avg_metric or "ndcg_at_5"))
         metrics.update(_run_eval(args, model, processor, mmeb_loader, dataset_format="mmeb", avg_metric="recall_at_1"))
     else:
-        eval_dataset_loader = _build_limited_loader(
+        eval_dataset_loader = _build_smoke_limited_loader(
             eval_dataset_loader,
-            max_queries=int(args.eval_max_queries),
-            max_corpus=int(args.eval_max_corpus),
+            max_queries=int(args.smoke_eval_max_queries),
+            max_corpus=int(args.smoke_eval_max_corpus),
             dataset_format=args.dataset_format,
         )
         avg_metric = args.avg_metric

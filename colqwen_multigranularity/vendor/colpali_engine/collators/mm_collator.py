@@ -108,7 +108,14 @@ class MultimodalRetrieverCollator:
 
     def __call__(self, examples: List[Dict[str, Any]]) -> Dict[str, Any]:
         self._debug_call_idx += 1
-        debug_enabled = self._debug_call_idx <= 3
+        debug_enabled = os.environ.get("MURE_COLLATOR_DEBUG", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "y",
+        }
+        if debug_enabled:
+            debug_enabled = self._debug_call_idx <= int(os.environ.get("MURE_COLLATOR_DEBUG_CALLS", "3"))
 
         def _debug(msg: str):
             if debug_enabled:

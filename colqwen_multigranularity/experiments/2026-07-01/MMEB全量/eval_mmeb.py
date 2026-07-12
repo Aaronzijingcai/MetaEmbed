@@ -86,11 +86,50 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-score", type=int, default=16)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--avg-metric", type=str, default="recall_at_1")
+    parser.add_argument(
+        "--maxsim-interaction",
+        type=str,
+        default="q2d",
+        choices=[
+            "q2d",
+            "q2d_query_topk",
+            "q2d_query_topk_sum",
+            "d2q_mean",
+            "bi_sum",
+            "bi_mean",
+            "bi_adaptive",
+            "bi_query_topk",
+            "bi_query_topk_sum",
+            "bi_query_topk_adaptive",
+            "bi_query_topk_sum_adaptive",
+            "bi_query_topk_hard_adaptive",
+            "bi_topk_mean",
+            "lse",
+            "bi_lse",
+        ],
+    )
+    parser.add_argument("--maxsim-bi-lambda", type=float, default=0.5)
+    parser.add_argument("--maxsim-lse-beta", type=float, default=20.0)
+    parser.add_argument("--maxsim-global-weight", type=float, default=0.0)
+    parser.add_argument("--maxsim-query-drop-prefix", type=int, default=0)
+    parser.add_argument("--maxsim-query-drop-suffix", type=int, default=0)
+    parser.add_argument(
+        "--maxsim-query-agg",
+        type=str,
+        default="sum",
+        choices=["sum", "mean", "topk_mean"],
+    )
+    parser.add_argument("--maxsim-query-topk", type=int, default=0)
+    parser.add_argument("--maxsim-adaptive-ratio", type=float, default=1.5)
+    parser.add_argument("--maxsim-length-norm-alpha", type=float, default=0.0)
+    parser.add_argument("--maxsim-hit-penalty-weight", type=float, default=0.0)
+    parser.add_argument("--maxsim-hit-penalty-threshold", type=float, default=0.35)
     parser.add_argument("--granularities", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--truncation-len", type=int, default=16384)
     parser.add_argument("--processor-max-length", type=int, default=None)
     parser.add_argument("--query-augmentation-repeats", type=int, default=10)
     parser.add_argument("--document-augmentation-repeats", type=int, default=0)
+    parser.add_argument("--strip-cirr-query-instruction", action="store_true", default=False)
     parser.add_argument("--include-multilingual", action="store_true")
     parser.add_argument("--drop-query-text-if-image", action="store_true", default=False)
     parser.add_argument("--drop-doc-text-if-image", action="store_true", default=False)
@@ -105,8 +144,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--v2-do-padding", action="store_true", dest="v2_do_padding")
     parser.add_argument("--no-v2-do-padding", action="store_false", dest="v2_do_padding")
     parser.add_argument("--only-eval-keywords", type=str, nargs="*", default=None)
-    parser.add_argument("--eval-max-queries", type=int, default=0)
-    parser.add_argument("--eval-max-local-dids", type=int, default=0)
+    parser.add_argument("--smoke-eval-max-queries", type=int, default=0)
+    parser.add_argument("--smoke-eval-max-local-dids", type=int, default=0)
     parser.set_defaults(use_simple_prompt=True, resize_crops_to_page=True, use_v2_retriever=True, v2_do_padding=True)
     return parser.parse_args()
 
@@ -174,10 +213,7 @@ def _filter_loader(eval_dataset_loader: dict, keywords: Optional[list[str]]) -> 
 
 def _select_dataset_rows(dataset, indices):
     if hasattr(dataset, "select"):
-        selected = dataset.select(indices, keep_in_memory=True)
-        if getattr(selected, "_indices", None) is not None and hasattr(selected, "flatten_indices"):
-            selected = selected.flatten_indices(keep_in_memory=True)
-        return selected
+        return dataset.select(indices)
     return [dataset[index] for index in indices]
 
 
@@ -240,6 +276,43 @@ def _build_limited_loader(eval_dataset_loader: dict, *, max_queries: int, max_lo
     return limited
 
 
+def _strip_cirr_instruction_text(text: Any) -> Any:
+    if not isinstance(text, str):
+        return text
+    prefix = "Given an image, find a similar everyday image with the described changes:"
+    stripped = text.strip()
+    if stripped.startswith(prefix):
+        stripped = stripped[len(prefix) :].strip()
+    return stripped
+
+
+def _build_cirr_instruction_stripped_loader(eval_dataset_loader: dict) -> dict:
+    stripped_loader = {}
+    for name, factory in eval_dataset_loader.items():
+        if "CIRR" not in str(name):
+            stripped_loader[name] = factory
+            continue
+
+        def _factory(factory=factory):
+            dataset = factory()
+            queries = dataset["queries"]
+            if hasattr(queries, "column_names") and "query_txt" in queries.column_names:
+                queries = queries.map(
+                    lambda row: {"query_txt": _strip_cirr_instruction_text(row.get("query_txt"))},
+                    desc="strip CIRR query instruction",
+                )
+            else:
+                for row in queries:
+                    if "query_txt" in row:
+                        row["query_txt"] = _strip_cirr_instruction_text(row["query_txt"])
+            dataset = dict(dataset)
+            dataset["queries"] = queries
+            return dataset
+
+        stripped_loader[name] = _factory
+    return stripped_loader
+
+
 def main() -> None:
     args = parse_args()
     import configue
@@ -277,10 +350,12 @@ def main() -> None:
     processor = base_eval.build_processor(model_args)
     eval_dataset_loader = configue.load(Path(args.eval_config))
     eval_dataset_loader = _filter_loader(eval_dataset_loader, args.only_eval_keywords)
+    if args.strip_cirr_query_instruction:
+        eval_dataset_loader = _build_cirr_instruction_stripped_loader(eval_dataset_loader)
     eval_dataset_loader = _build_limited_loader(
         eval_dataset_loader,
-        max_queries=int(args.eval_max_queries),
-        max_local_dids=int(args.eval_max_local_dids),
+        max_queries=int(args.smoke_eval_max_queries),
+        max_local_dids=int(args.smoke_eval_max_local_dids),
     )
     no_eval_keywords = [] if args.include_multilingual else None
     is_rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
@@ -295,11 +370,25 @@ def main() -> None:
                     "budgets": folder_homo_config.budgets,
                     "compress_stages": folder_homo_config.compress_stages,
                     "asym_query_config": asym_query_config,
+                    "maxsim_interaction": args.maxsim_interaction,
+                    "maxsim_bi_lambda": args.maxsim_bi_lambda,
+                    "maxsim_lse_beta": args.maxsim_lse_beta,
+                    "maxsim_global_weight": args.maxsim_global_weight,
+                    "maxsim_query_agg": args.maxsim_query_agg,
+                    "maxsim_query_topk": args.maxsim_query_topk,
+                    "maxsim_adaptive_ratio": args.maxsim_adaptive_ratio,
+                    "maxsim_length_norm_alpha": args.maxsim_length_norm_alpha,
+                    "maxsim_hit_penalty_weight": args.maxsim_hit_penalty_weight,
+                    "maxsim_hit_penalty_threshold": args.maxsim_hit_penalty_threshold,
+                    "query_augmentation_repeats": args.query_augmentation_repeats,
+                    "document_augmentation_repeats": args.document_augmentation_repeats,
+                    "drop_doc_text_if_image": args.drop_doc_text_if_image,
+                    "strip_cirr_query_instruction": args.strip_cirr_query_instruction,
                     "eval_config": args.eval_config,
                     "avg_metric": args.avg_metric,
                     "only_eval_keywords": args.only_eval_keywords,
-                    "eval_max_queries": args.eval_max_queries,
-                    "eval_max_local_dids": args.eval_max_local_dids,
+                    "smoke_eval_max_queries": args.smoke_eval_max_queries,
+                    "smoke_eval_max_local_dids": args.smoke_eval_max_local_dids,
                 },
                 ensure_ascii=False,
             )

@@ -1,0 +1,21 @@
+# Compact train pool for MaxSim trainable experiments.
+# Goal: keep ViDoRe/visual-document retrieval signal while adding MMEB hard tasks.
+
+# MMEB hard/core4 tasks.
+CIRR: {"weight": 1.0, "num_samples": 50000}
+ChartQA: {"weight": 1.0, "num_samples": 50000}
+A-OKVQA: {"weight": 1.0, "num_samples": 50000}
+Visual7W: {"weight": 1.0, "num_samples": 50000}
+
+# Stable image/text retrieval anchors.
+MSCOCO_t2i: {"weight": 0.5, "num_samples": 50000}
+MSCOCO_i2t: {"weight": 0.5, "num_samples": 50000}
+VisualNews_t2i: {"weight": 0.5, "num_samples": 50000}
+VisualNews_i2t: {"weight": 0.5, "num_samples": 50000}
+VisDial: {"weight": 0.5, "num_samples": 25000}
+WebQA: {"weight": 0.5, "num_samples": 25000}
+
+# Visual-document retrieval anchors. These are intentionally capped to avoid
+# recreating the unstable fullmix setting.
+tevatron_colpali: {"weight": 1.0, "num_samples": 100000}
+visrag_ind: {"weight": 1.0, "num_samples": 100000}

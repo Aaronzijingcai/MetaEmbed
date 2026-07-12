@@ -1,0 +1,6 @@
+# Currently trainable compositional/image-query hard subsets.
+# FashionIQ/EDIS are eval targets but are not in the current train config.
+
+CIRR: {"weight": 1.0, "num_samples": 50000}
+NIGHTS: {"weight": 0.5, "num_samples": 50000}
+

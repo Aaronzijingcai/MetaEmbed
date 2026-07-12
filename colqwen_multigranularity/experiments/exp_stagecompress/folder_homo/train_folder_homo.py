@@ -44,6 +44,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--marc-dup-threshold', type=float, default=0.88)
     parser.add_argument('--marc-anchor-boost', type=float, default=1.0)
     parser.add_argument('--marc-anchor-floor', type=float, default=0.05)
+    parser.add_argument(
+        '--interaction-loss-mode',
+        type=str,
+        default='flat',
+        choices=[
+            'flat',
+            'q2d_sum',
+            'q2d_mean',
+            'q2d_query_topk',
+            'q2d_query_topk_sum',
+            'bi_mean',
+            'bi_adaptive',
+            'bi_query_topk',
+            'bi_query_topk_sum',
+            'bi_query_topk_adaptive',
+            'bi_query_topk_sum_adaptive',
+            'bi_query_topk_hard_adaptive',
+            'global_local',
+            'factorized_local',
+            'factorized_global',
+        ],
+    )
+    parser.add_argument('--interaction-bi-lambda', type=float, default=0.5)
+    parser.add_argument('--interaction-global-weight', type=float, default=0.0)
+    parser.add_argument('--interaction-factorized-local-weight', type=float, default=1.0)
+    parser.add_argument('--interaction-global-aux-weight', type=float, default=0.0)
+    parser.add_argument('--interaction-query-topk', type=int, default=48)
+    parser.add_argument('--interaction-adaptive-ratio', type=float, default=1.5)
     parser.add_argument('--warm-start-adapter-path', type=str, default=None)
     parser.add_argument('--folder-homo-skip-save', action='store_true', default=False)
     parser.add_argument('--folder-homo-train-compressor-only', action='store_true', default=False)
@@ -84,6 +112,13 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         marc_dup_threshold=float(args.marc_dup_threshold),
         marc_anchor_boost=float(args.marc_anchor_boost),
         marc_anchor_floor=float(args.marc_anchor_floor),
+        interaction_loss_mode=str(args.interaction_loss_mode),
+        interaction_bi_lambda=float(args.interaction_bi_lambda),
+        interaction_global_weight=float(args.interaction_global_weight),
+        interaction_factorized_local_weight=float(args.interaction_factorized_local_weight),
+        interaction_global_aux_weight=float(args.interaction_global_aux_weight),
+        interaction_query_topk=int(args.interaction_query_topk),
+        interaction_adaptive_ratio=float(args.interaction_adaptive_ratio),
     )
 
 
@@ -154,6 +189,7 @@ def main() -> None:
             level_weights=level_weights,
             normalize_scores=args.normalize_scores,
             doc_chunk_size=args.doc_chunk_size,
+            query_chunk_size=args.query_chunk_size,
         )
         tr_args = base_train.build_training_arguments(args)
         config = ColModelTrainingConfig(
@@ -224,10 +260,12 @@ def main() -> None:
                 torch.save(homo.state_dict(), save_dir / 'folder_homo.pt')
 
         folder_homo_state_path = None
-        if args.resume_from_checkpoint:
-            candidate = Path(args.resume_from_checkpoint) / 'folder_homo.pt'
-            if candidate.exists():
-                folder_homo_state_path = candidate
+        for checkpoint_arg in (args.resume_from_checkpoint, args.warm_start_adapter_path):
+            if checkpoint_arg:
+                candidate = Path(checkpoint_arg) / 'folder_homo.pt'
+                if candidate.exists():
+                    folder_homo_state_path = candidate
+                    break
         if folder_homo_state_path is not None:
             homo = _get_folder_homo(config.model)
             if homo is not None:

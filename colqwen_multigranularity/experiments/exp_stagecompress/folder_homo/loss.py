@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from typing import Callable, Optional, Sequence
 
 import torch
@@ -9,7 +11,7 @@ from .config import FolderHomoConfig
 
 
 class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
-    def __init__(self, *, image_token_id: int, folder_homo_config: FolderHomoConfig, temperature: float = 0.03, granularities: Sequence[int] = (1, 2, 4), level_weights: Optional[Sequence[float]] = None, normalize_scores: bool = True, use_smooth_max: bool = False, doc_chunk_size: int = 512, pos_aware_negative_filtering: bool = False, max_batch_size: int = 2048, tau: float = 0.1, norm_tol: float = 1e-3, filter_threshold: float = 0.95, filter_factor: float = 0.5, marc_provider: Optional[Callable[[], object]] = None) -> None:
+    def __init__(self, *, image_token_id: int, folder_homo_config: FolderHomoConfig, temperature: float = 0.03, granularities: Sequence[int] = (1, 2, 4), level_weights: Optional[Sequence[float]] = None, normalize_scores: bool = True, use_smooth_max: bool = False, doc_chunk_size: int = 512, query_chunk_size: Optional[int] = 512, pos_aware_negative_filtering: bool = False, max_batch_size: int = 2048, tau: float = 0.1, norm_tol: float = 1e-3, filter_threshold: float = 0.95, filter_factor: float = 0.5, marc_provider: Optional[Callable[[], object]] = None) -> None:
         super().__init__(
             image_token_id=image_token_id,
             compress_config=folder_homo_config,
@@ -19,6 +21,7 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
             normalize_scores=normalize_scores,
             use_smooth_max=use_smooth_max,
             doc_chunk_size=doc_chunk_size,
+            query_chunk_size=query_chunk_size,
             pos_aware_negative_filtering=pos_aware_negative_filtering,
             max_batch_size=max_batch_size,
             tau=tau,
@@ -36,6 +39,26 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
         self.marc_dup_threshold = float(getattr(folder_homo_config, 'marc_dup_threshold', 0.88))
         self.marc_anchor_boost = float(getattr(folder_homo_config, 'marc_anchor_boost', 1.0))
         self.marc_anchor_floor = float(getattr(folder_homo_config, 'marc_anchor_floor', 0.05))
+        self.interaction_loss_mode = str(getattr(folder_homo_config, 'interaction_loss_mode', 'flat')).strip().lower()
+        self.interaction_bi_lambda = float(getattr(folder_homo_config, 'interaction_bi_lambda', 0.5))
+        self.interaction_global_weight = float(getattr(folder_homo_config, 'interaction_global_weight', 0.0))
+        self.interaction_factorized_local_weight = float(getattr(folder_homo_config, 'interaction_factorized_local_weight', 1.0))
+        self.interaction_global_aux_weight = float(getattr(folder_homo_config, 'interaction_global_aux_weight', 0.0))
+        self.interaction_query_topk = int(getattr(folder_homo_config, 'interaction_query_topk', 48))
+        self.interaction_adaptive_ratio = float(getattr(folder_homo_config, 'interaction_adaptive_ratio', 1.5))
+        self._timing_forward_count = 0
+
+    def _timing_enabled(self) -> bool:
+        return os.environ.get('MURE_LOSS_TIMING', '').strip().lower() in {'1', 'true', 'yes', 'y'}
+
+    def _timing_rank(self) -> int:
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            return int(torch.distributed.get_rank())
+        return 0
+
+    def _timing_log(self, message: str) -> None:
+        if self._timing_enabled():
+            print(f"[loss-timing][rank={self._timing_rank()}] {message}", flush=True)
 
     def _resolve_marc_aux(self):
         if not bool(getattr(self.folder_homo_config, 'marc_enabled', False)):
@@ -43,6 +66,540 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
         if self.marc_provider is None:
             return None
         return self.marc_provider()
+
+    def _text_image_masks(
+        self,
+        *,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        level_mask: torch.Tensor,
+        output_length: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        attn = attention_mask.to(dtype=torch.bool)
+        text_lengths = ((~input_ids.eq(self.image_token_id)) & attn).sum(dim=1)
+        positions = torch.arange(output_length, device=input_ids.device).unsqueeze(0)
+        text_mask = positions < text_lengths.unsqueeze(1)
+        image_mask = positions >= text_lengths.unsqueeze(1)
+        text_mask = text_mask & level_mask
+        image_mask = image_mask & level_mask
+        return text_mask, image_mask
+
+    @staticmethod
+    def _masked_global_vectors(embeddings: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        masked = embeddings.masked_fill(~mask.unsqueeze(-1), 0.0)
+        denom = mask.sum(dim=1).clamp_min(1).to(dtype=embeddings.dtype).unsqueeze(-1)
+        pooled = masked.sum(dim=1) / denom
+        return F.normalize(pooled.float(), dim=-1, eps=1e-12).to(dtype=embeddings.dtype)
+
+    def _global_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        q = self._masked_global_vectors(query_embeddings, query_mask)
+        d = self._masked_global_vectors(doc_embeddings, doc_mask)
+        return torch.matmul(q.float(), d.float().transpose(0, 1)).to(dtype=query_embeddings.dtype)
+
+    def _global_diag_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        q = self._masked_global_vectors(query_embeddings, query_mask)
+        d = self._masked_global_vectors(doc_embeddings, doc_mask)
+        return (q.float() * d.float()).sum(dim=-1).to(dtype=query_embeddings.dtype)
+
+    def _aggregate_query_topk_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        topk: int,
+        reduce: str = 'mean',
+        diagonal: bool = False,
+    ) -> torch.Tensor:
+        if self.use_smooth_max:
+            raise NotImplementedError("use_smooth_max=True is not supported for q2d_query_topk training.")
+
+        query_mask = query_mask.to(dtype=torch.bool)
+        doc_mask = doc_mask.to(dtype=torch.bool)
+        if query_mask.any():
+            max_query_len = int(query_mask.long().sum(dim=1).max().item())
+            query_embeddings = query_embeddings[:, :max_query_len]
+            query_mask = query_mask[:, :max_query_len]
+        if doc_mask.any():
+            max_doc_len = int(doc_mask.long().sum(dim=1).max().item())
+            doc_embeddings = doc_embeddings[:, :max_doc_len]
+            doc_mask = doc_mask[:, :max_doc_len]
+
+        topk = max(int(topk), 1)
+        reduce = str(reduce).strip().lower()
+        if reduce not in {'mean', 'sum'}:
+            raise ValueError(f"Unsupported query TopK reduce={reduce!r}; expected 'mean' or 'sum'.")
+        bsz, nq, dim = query_embeddings.shape
+        doc_bsz, nd, dim_d = doc_embeddings.shape
+        if dim_d != dim:
+            raise ValueError(f"Dim mismatch: query dim={dim} doc dim={dim_d}")
+        if diagonal and doc_bsz != bsz:
+            raise ValueError(f"Diagonal topK score expects matching batch sizes, got {bsz} and {doc_bsz}")
+
+        neg_inf = torch.finfo(query_embeddings.dtype).min
+        doc_chunk_size = max(int(self.doc_chunk_size), 1)
+        query_chunk_size = max(int(self.query_chunk_size), 1) if self.query_chunk_size else nq
+        if diagonal:
+            token_scores = query_embeddings.new_full((bsz, nq), neg_inf)
+        else:
+            token_scores = query_embeddings.new_full((bsz, doc_bsz, nq), neg_inf)
+
+        for query_start in range(0, nq, query_chunk_size):
+            query_end = min(query_start + query_chunk_size, nq)
+            query_chunk = query_embeddings[:, query_start:query_end]
+            query_width = query_end - query_start
+            if diagonal:
+                running = query_chunk.new_full((bsz, query_width), neg_inf)
+            else:
+                running = query_chunk.new_full((bsz, doc_bsz, query_width), neg_inf)
+
+            for doc_start in range(0, nd, doc_chunk_size):
+                doc_end = min(doc_start + doc_chunk_size, nd)
+                doc_chunk = doc_embeddings[:, doc_start:doc_end]
+                doc_mask_chunk = doc_mask[:, doc_start:doc_end]
+                if diagonal:
+                    sims = torch.einsum("bqd,bsd->bqs", query_chunk, doc_chunk)
+                    sims.masked_fill_(~doc_mask_chunk.unsqueeze(1), neg_inf)
+                    running = torch.maximum(running, sims.amax(dim=2))
+                else:
+                    sims = torch.einsum("bqd,csd->bcqs", query_chunk, doc_chunk)
+                    sims.masked_fill_(~doc_mask_chunk.unsqueeze(0).unsqueeze(2), neg_inf)
+                    running = torch.maximum(running, sims.amax(dim=3))
+
+            if diagonal:
+                token_scores[:, query_start:query_end] = running
+            else:
+                token_scores[:, :, query_start:query_end] = running
+
+        if diagonal:
+            values = token_scores.masked_fill(~query_mask.to(dtype=torch.bool), neg_inf)
+            k = min(topk, values.size(1))
+            top_values = values.topk(k=k, dim=1).values
+            valid_top = top_values.ne(neg_inf)
+            top_values = top_values.masked_fill(~valid_top, 0.0)
+            if reduce == 'sum':
+                return top_values.sum(dim=1)
+            denom = valid_top.sum(dim=1).clamp_min(1).to(dtype=top_values.dtype)
+            return top_values.sum(dim=1) / denom
+
+        values = token_scores.masked_fill(~query_mask.to(dtype=torch.bool).unsqueeze(1), neg_inf)
+        k = min(topk, values.size(2))
+        top_values = values.topk(k=k, dim=2).values
+        valid_top = top_values.ne(neg_inf)
+        top_values = top_values.masked_fill(~valid_top, 0.0)
+        if reduce == 'sum':
+            return top_values.sum(dim=2)
+        denom = valid_top.sum(dim=2).clamp_min(1).to(dtype=top_values.dtype)
+        return top_values.sum(dim=2) / denom
+
+    def _factorized_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_text_mask: torch.Tensor,
+        query_image_mask: torch.Tensor,
+        doc_text_mask: torch.Tensor,
+        doc_image_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        total_scores = query_embeddings.new_zeros((query_embeddings.size(0), doc_embeddings.size(0)))
+        active_counts = query_embeddings.new_zeros((query_embeddings.size(0), doc_embeddings.size(0)))
+        stats: dict[str, torch.Tensor] = {}
+        for name, q_mask, d_mask in (
+            ('tt', query_text_mask, doc_text_mask),
+            ('ti', query_text_mask, doc_image_mask),
+            ('it', query_image_mask, doc_text_mask),
+            ('ii', query_image_mask, doc_image_mask),
+        ):
+            active = q_mask.any(dim=1).unsqueeze(1) & d_mask.any(dim=1).unsqueeze(0)
+            if not torch.any(active):
+                stats[f'factorized_active_{name}'] = query_embeddings.new_tensor(0.0)
+                continue
+            score = self._aggregate_masked_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=q_mask,
+                doc_mask=d_mask,
+            )
+            total_scores = total_scores + score.masked_fill(~active, 0.0)
+            active_counts = active_counts + active.to(dtype=total_scores.dtype)
+            stats[f'factorized_active_{name}'] = active.float().mean().detach()
+        if not torch.any(active_counts > 0):
+            return query_embeddings.new_zeros((query_embeddings.size(0), doc_embeddings.size(0))), stats
+        return total_scores / active_counts.clamp_min(1.0), stats
+
+    def _factorized_diag_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_text_mask: torch.Tensor,
+        query_image_mask: torch.Tensor,
+        doc_text_mask: torch.Tensor,
+        doc_image_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        total_scores = query_embeddings.new_zeros((query_embeddings.size(0),))
+        active_counts = query_embeddings.new_zeros((query_embeddings.size(0),))
+        for q_mask, d_mask in (
+            (query_text_mask, doc_text_mask),
+            (query_text_mask, doc_image_mask),
+            (query_image_mask, doc_text_mask),
+            (query_image_mask, doc_image_mask),
+        ):
+            active = q_mask.any(dim=1) & d_mask.any(dim=1)
+            if not torch.any(active):
+                continue
+            score = self._aggregate_diagonal_masked_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=q_mask,
+                doc_mask=d_mask,
+            )
+            total_scores = total_scores + score.masked_fill(~active, 0.0)
+            active_counts = active_counts + active.to(dtype=total_scores.dtype)
+        if not torch.any(active_counts > 0):
+            return query_embeddings.new_zeros((query_embeddings.size(0),))
+        return total_scores / active_counts.clamp_min(1.0)
+
+    def _adaptive_bi_lambda(self, *, query_mask: torch.Tensor, doc_mask: torch.Tensor, pairwise: bool) -> torch.Tensor:
+        max_lambda = min(max(float(self.interaction_bi_lambda), 0.5), 1.0)
+        query_len = query_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
+        doc_len = doc_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
+        if pairwise:
+            lam = doc_len.unsqueeze(0) / (query_len.unsqueeze(1) + doc_len.unsqueeze(0)).clamp_min(1.0)
+        else:
+            lam = doc_len / (query_len + doc_len).clamp_min(1.0)
+        return lam.clamp(min=0.5, max=max_lambda).to(device=query_mask.device)
+
+    def _combine_bi_scores(
+        self,
+        *,
+        q2d: torch.Tensor,
+        d2q: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        adaptive: bool,
+    ) -> torch.Tensor:
+        if adaptive:
+            row_lambda = self._adaptive_bi_lambda(
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                pairwise=(q2d.ndim == 2),
+            ).to(dtype=q2d.dtype)
+        else:
+            row_lambda = q2d.new_tensor(min(max(float(self.interaction_bi_lambda), 0.0), 1.0))
+        return row_lambda * q2d + (1.0 - row_lambda) * d2q
+
+    def _combine_hard_adaptive_bi_scores(
+        self,
+        *,
+        q2d: torch.Tensor,
+        d2q: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        ratio = max(float(self.interaction_adaptive_ratio), 1.0)
+        query_len = query_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
+        doc_len = doc_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
+        if q2d.ndim == 2:
+            use_q2d = doc_len.unsqueeze(0) >= query_len.unsqueeze(1) * ratio
+            use_d2q = query_len.unsqueeze(1) >= doc_len.unsqueeze(0) * ratio
+        else:
+            use_q2d = doc_len >= query_len * ratio
+            use_d2q = query_len >= doc_len * ratio
+        bi = 0.5 * (q2d + d2q)
+        return torch.where(use_q2d.to(device=q2d.device), q2d, torch.where(use_d2q.to(device=q2d.device), d2q, bi))
+
+    def _aggregate_masked_scores_with_normalization(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        normalize_scores: bool,
+    ) -> torch.Tensor:
+        old_normalize = self.normalize_scores
+        self.normalize_scores = bool(normalize_scores)
+        try:
+            return self._aggregate_masked_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+            )
+        finally:
+            self.normalize_scores = old_normalize
+
+    def _aggregate_diagonal_masked_scores_with_normalization(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        normalize_scores: bool,
+    ) -> torch.Tensor:
+        old_normalize = self.normalize_scores
+        self.normalize_scores = bool(normalize_scores)
+        try:
+            return self._aggregate_diagonal_masked_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+            )
+        finally:
+            self.normalize_scores = old_normalize
+
+    def _compute_interaction_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        query_text_mask: torch.Tensor,
+        query_image_mask: torch.Tensor,
+        doc_text_mask: torch.Tensor,
+        doc_image_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor], Optional[torch.Tensor]]:
+        mode = self.interaction_loss_mode
+        stats: dict[str, torch.Tensor] = {}
+        global_score = None
+        if mode in {'q2d_query_topk', 'q2d_query_topk_sum'}:
+            topk = max(int(self.interaction_query_topk), 1)
+            topk_scores = self._aggregate_query_topk_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                topk=topk,
+                reduce='sum' if mode == 'q2d_query_topk_sum' else 'mean',
+                diagonal=False,
+            )
+            stats['query_topk'] = query_embeddings.new_tensor(float(topk))
+            return topk_scores, stats, None
+        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive', 'bi_query_topk_hard_adaptive'}:
+            topk = max(int(self.interaction_query_topk), 1)
+            reduce = 'sum' if mode in {'bi_query_topk_sum', 'bi_query_topk_sum_adaptive'} else 'mean'
+            q2d = self._aggregate_query_topk_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                topk=topk,
+                reduce=reduce,
+                diagonal=False,
+            )
+            d2q = self._aggregate_query_topk_scores(
+                query_embeddings=doc_embeddings,
+                doc_embeddings=query_embeddings,
+                query_mask=doc_mask,
+                doc_mask=query_mask,
+                topk=topk,
+                reduce=reduce,
+                diagonal=False,
+            ).transpose(0, 1)
+            stats['query_topk'] = query_embeddings.new_tensor(float(topk))
+            stats['interaction_bi_lambda'] = query_embeddings.new_tensor(float(self.interaction_bi_lambda))
+            if mode == 'bi_query_topk_hard_adaptive':
+                stats['interaction_adaptive_ratio'] = query_embeddings.new_tensor(float(self.interaction_adaptive_ratio))
+                return self._combine_hard_adaptive_bi_scores(
+                    q2d=q2d,
+                    d2q=d2q,
+                    query_mask=query_mask,
+                    doc_mask=doc_mask,
+                ), stats, None
+            return self._combine_bi_scores(
+                q2d=q2d,
+                d2q=d2q,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                adaptive=(mode in {'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive'}),
+            ), stats, None
+        local = self._aggregate_masked_scores(
+            query_embeddings=query_embeddings,
+            doc_embeddings=doc_embeddings,
+            query_mask=query_mask,
+            doc_mask=doc_mask,
+        )
+        if mode in {'flat', 'q2d_mean'}:
+            return local, stats, None
+        if mode == 'q2d_sum':
+            local = self._aggregate_masked_scores_with_normalization(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                normalize_scores=False,
+            )
+            return local, stats, None
+        if mode in {'bi_mean', 'bi_adaptive'}:
+            reverse = self._aggregate_masked_scores(
+                query_embeddings=doc_embeddings,
+                doc_embeddings=query_embeddings,
+                query_mask=doc_mask,
+                doc_mask=query_mask,
+            ).transpose(0, 1)
+            local = self._combine_bi_scores(
+                q2d=local,
+                d2q=reverse,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                adaptive=(mode == 'bi_adaptive'),
+            )
+            stats['interaction_bi_lambda'] = query_embeddings.new_tensor(float(self.interaction_bi_lambda))
+            return local, stats, None
+        if mode in {'factorized_local', 'factorized_global'}:
+            factorized, factorized_stats = self._factorized_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_text_mask=query_text_mask,
+                query_image_mask=query_image_mask,
+                doc_text_mask=doc_text_mask,
+                doc_image_mask=doc_image_mask,
+            )
+            stats.update(factorized_stats)
+            local_weight = max(float(self.interaction_factorized_local_weight), 0.0)
+            local = local_weight * factorized + (1.0 - local_weight) * local
+        if mode in {'global_local', 'factorized_global'}:
+            global_score = self._global_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+            )
+            weight = min(max(float(self.interaction_global_weight), 0.0), 1.0)
+            if weight > 0.0:
+                local = (1.0 - weight) * local + weight * global_score
+        return local, stats, global_score
+
+    def _compute_interaction_diag_scores(
+        self,
+        *,
+        query_embeddings: torch.Tensor,
+        doc_embeddings: torch.Tensor,
+        query_mask: torch.Tensor,
+        doc_mask: torch.Tensor,
+        query_text_mask: torch.Tensor,
+        query_image_mask: torch.Tensor,
+        doc_text_mask: torch.Tensor,
+        doc_image_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        mode = self.interaction_loss_mode
+        if mode in {'q2d_query_topk', 'q2d_query_topk_sum'}:
+            return self._aggregate_query_topk_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                topk=max(int(self.interaction_query_topk), 1),
+                reduce='sum' if mode == 'q2d_query_topk_sum' else 'mean',
+                diagonal=True,
+            )
+        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive', 'bi_query_topk_hard_adaptive'}:
+            topk = max(int(self.interaction_query_topk), 1)
+            reduce = 'sum' if mode in {'bi_query_topk_sum', 'bi_query_topk_sum_adaptive'} else 'mean'
+            q2d = self._aggregate_query_topk_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                topk=topk,
+                reduce=reduce,
+                diagonal=True,
+            )
+            d2q = self._aggregate_query_topk_scores(
+                query_embeddings=doc_embeddings,
+                doc_embeddings=query_embeddings,
+                query_mask=doc_mask,
+                doc_mask=query_mask,
+                topk=topk,
+                reduce=reduce,
+                diagonal=True,
+            )
+            if mode == 'bi_query_topk_hard_adaptive':
+                return self._combine_hard_adaptive_bi_scores(
+                    q2d=q2d,
+                    d2q=d2q,
+                    query_mask=query_mask,
+                    doc_mask=doc_mask,
+                )
+            return self._combine_bi_scores(
+                q2d=q2d,
+                d2q=d2q,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                adaptive=(mode in {'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive'}),
+            )
+        local = self._aggregate_diagonal_masked_scores(
+            query_embeddings=query_embeddings,
+            doc_embeddings=doc_embeddings,
+            query_mask=query_mask,
+            doc_mask=doc_mask,
+        )
+        if mode in {'flat', 'q2d_mean'}:
+            return local
+        if mode == 'q2d_sum':
+            return self._aggregate_diagonal_masked_scores_with_normalization(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                normalize_scores=False,
+            )
+        if mode in {'bi_mean', 'bi_adaptive'}:
+            reverse = self._aggregate_diagonal_masked_scores(
+                query_embeddings=doc_embeddings,
+                doc_embeddings=query_embeddings,
+                query_mask=doc_mask,
+                doc_mask=query_mask,
+            )
+            return self._combine_bi_scores(
+                q2d=local,
+                d2q=reverse,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+                adaptive=(mode == 'bi_adaptive'),
+            )
+        if mode in {'factorized_local', 'factorized_global'}:
+            factorized = self._factorized_diag_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_text_mask=query_text_mask,
+                query_image_mask=query_image_mask,
+                doc_text_mask=doc_text_mask,
+                doc_image_mask=doc_image_mask,
+            )
+            local_weight = max(float(self.interaction_factorized_local_weight), 0.0)
+            local = local_weight * factorized + (1.0 - local_weight) * local
+        if mode in {'global_local', 'factorized_global'}:
+            global_score = self._global_diag_scores(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                query_mask=query_mask,
+                doc_mask=doc_mask,
+            )
+            weight = min(max(float(self.interaction_global_weight), 0.0), 1.0)
+            if weight > 0.0:
+                local = (1.0 - weight) * local + weight * global_score
+        return local
 
     def _positive_doc_indices(self, batch_size: int, offset: int, device: torch.device) -> torch.Tensor:
         _, pos_idx = self._get_idx(batch_size, offset, device)
@@ -353,21 +910,176 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
         neg_doc_input_ids=None,
         neg_doc_attention_mask=None,
     ):
-        total_loss, loss_stats = super().forward(
-            query_embeddings=query_embeddings,
-            doc_embeddings=doc_embeddings,
-            neg_doc_embeddings=neg_doc_embeddings,
-            offset=offset,
-            query_has_images=query_has_images,
-            doc_has_images=doc_has_images,
-            neg_doc_has_images=neg_doc_has_images,
-            query_input_ids=query_input_ids,
-            query_attention_mask=query_attention_mask,
-            doc_input_ids=doc_input_ids,
-            doc_attention_mask=doc_attention_mask,
-            neg_doc_input_ids=neg_doc_input_ids,
-            neg_doc_attention_mask=neg_doc_attention_mask,
-        )
+        if self.interaction_loss_mode == 'flat':
+            total_loss, loss_stats = super().forward(
+                query_embeddings=query_embeddings,
+                doc_embeddings=doc_embeddings,
+                neg_doc_embeddings=neg_doc_embeddings,
+                offset=offset,
+                query_has_images=query_has_images,
+                doc_has_images=doc_has_images,
+                neg_doc_has_images=neg_doc_has_images,
+                query_input_ids=query_input_ids,
+                query_attention_mask=query_attention_mask,
+                doc_input_ids=doc_input_ids,
+                doc_attention_mask=doc_attention_mask,
+                neg_doc_input_ids=neg_doc_input_ids,
+                neg_doc_attention_mask=neg_doc_attention_mask,
+            )
+        else:
+            if query_input_ids is None or query_attention_mask is None:
+                raise ValueError("query_input_ids/query_attention_mask are required for interaction loss.")
+            if doc_input_ids is None or doc_attention_mask is None:
+                raise ValueError("doc_input_ids/doc_attention_mask are required for interaction loss.")
+
+            query_lengths = self._valid_lengths(query_embeddings)
+            doc_lengths = self._valid_lengths(doc_embeddings)
+            query_has_images = self._coerce_bool_mask(query_has_images, query_lengths)
+            doc_has_images = self._coerce_bool_mask(doc_has_images, doc_lengths)
+            query_masks = self._build_group_masks(
+                input_ids=query_input_ids,
+                attention_mask=query_attention_mask,
+                output_length=query_embeddings.size(1),
+            )
+            doc_masks = self._build_group_masks(
+                input_ids=doc_input_ids,
+                attention_mask=doc_attention_mask,
+                output_length=doc_embeddings.size(1),
+            )
+
+            neg_masks = None
+            neg_text_masks = neg_image_masks = None
+            if neg_doc_embeddings is not None and neg_doc_input_ids is not None and neg_doc_attention_mask is not None:
+                neg_lengths = self._valid_lengths(neg_doc_embeddings)
+                neg_doc_has_images = self._coerce_bool_mask(neg_doc_has_images, neg_lengths)
+                neg_masks = self._build_group_masks(
+                    input_ids=neg_doc_input_ids,
+                    attention_mask=neg_doc_attention_mask,
+                    output_length=neg_doc_embeddings.size(1),
+                )
+
+            batch_size = query_embeddings.size(0)
+            _, pos_idx = self._get_idx(batch_size, offset, query_embeddings.device)
+            pos_doc_has_images = doc_has_images[pos_idx]
+            active_levels = self._build_level_activity(
+                query_has_images=query_has_images,
+                doc_has_images=pos_doc_has_images,
+                neg_doc_has_images=neg_doc_has_images,
+            )
+
+            total_loss = query_embeddings.new_tensor(0.0)
+            loss_stats = {
+                'interaction_mode': query_embeddings.new_tensor(0.0),
+                'interaction_bi_lambda': query_embeddings.new_tensor(float(self.interaction_bi_lambda)),
+                'interaction_global_weight': query_embeddings.new_tensor(float(self.interaction_global_weight)),
+                'interaction_factorized_local_weight': query_embeddings.new_tensor(float(self.interaction_factorized_local_weight)),
+                'interaction_query_topk': query_embeddings.new_tensor(float(self.interaction_query_topk)),
+            }
+            timing_enabled = self._timing_enabled() and self._timing_forward_count < 2
+            self._timing_forward_count += 1
+            if timing_enabled:
+                self._timing_log(
+                    f"forward_start mode={self.interaction_loss_mode} "
+                    f"query={tuple(query_embeddings.shape)} doc={tuple(doc_embeddings.shape)} "
+                    f"neg={None if neg_doc_embeddings is None else tuple(neg_doc_embeddings.shape)} "
+                    f"levels={list(self.level_labels)}"
+                )
+
+            for level_index, (label, weight) in enumerate(zip(self.level_labels, self.level_weights)):
+                row_mask = active_levels[:, level_index]
+                if not torch.any(row_mask):
+                    continue
+                if timing_enabled:
+                    level_t0 = time.perf_counter()
+                    self._timing_log(
+                        f"level={label} start active={int(row_mask.sum().item())}/{int(row_mask.numel())} "
+                        f"q_tokens={int(query_masks[:, level_index].sum(dim=1).max().item())} "
+                        f"d_tokens={int(doc_masks[:, level_index].sum(dim=1).max().item())}"
+                    )
+                query_text_mask, query_image_mask = self._text_image_masks(
+                    input_ids=query_input_ids,
+                    attention_mask=query_attention_mask,
+                    level_mask=query_masks[:, level_index],
+                    output_length=query_embeddings.size(1),
+                )
+                doc_text_mask, doc_image_mask = self._text_image_masks(
+                    input_ids=doc_input_ids,
+                    attention_mask=doc_attention_mask,
+                    level_mask=doc_masks[:, level_index],
+                    output_length=doc_embeddings.size(1),
+                )
+                pos_scores, score_stats, global_scores = self._compute_interaction_scores(
+                    query_embeddings=query_embeddings,
+                    doc_embeddings=doc_embeddings,
+                    query_mask=query_masks[:, level_index],
+                    doc_mask=doc_masks[:, level_index],
+                    query_text_mask=query_text_mask,
+                    query_image_mask=query_image_mask,
+                    doc_text_mask=doc_text_mask,
+                    doc_image_mask=doc_image_mask,
+                )
+                if timing_enabled:
+                    torch.cuda.synchronize(query_embeddings.device)
+                    self._timing_log(f"level={label} pos_scores_done dt={time.perf_counter() - level_t0:.2f}s shape={tuple(pos_scores.shape)}")
+
+                neg_scores = None
+                if neg_doc_embeddings is not None and neg_masks is not None:
+                    if timing_enabled:
+                        neg_t0 = time.perf_counter()
+                    neg_text_mask, neg_image_mask = self._text_image_masks(
+                        input_ids=neg_doc_input_ids,
+                        attention_mask=neg_doc_attention_mask,
+                        level_mask=neg_masks[:, level_index],
+                        output_length=neg_doc_embeddings.size(1),
+                    )
+                    neg_diag_scores = self._compute_interaction_diag_scores(
+                        query_embeddings=query_embeddings,
+                        doc_embeddings=neg_doc_embeddings,
+                        query_mask=query_masks[:, level_index],
+                        doc_mask=neg_masks[:, level_index],
+                        query_text_mask=query_text_mask,
+                        query_image_mask=query_image_mask,
+                        doc_text_mask=neg_text_mask,
+                        doc_image_mask=neg_image_mask,
+                    )
+                    neg_scores = neg_diag_scores.unsqueeze(1)
+                    if timing_enabled:
+                        torch.cuda.synchronize(query_embeddings.device)
+                        self._timing_log(f"level={label} neg_scores_done dt={time.perf_counter() - neg_t0:.2f}s shape={tuple(neg_scores.shape)}")
+
+                if timing_enabled:
+                    loss_t0 = time.perf_counter()
+                level_loss = self._get_loss_from_scores(
+                    pos_scores=pos_scores,
+                    neg_scores=neg_scores,
+                    offset=offset,
+                    row_mask=row_mask,
+                )
+                if timing_enabled:
+                    torch.cuda.synchronize(query_embeddings.device)
+                    self._timing_log(f"level={label} loss_done dt={time.perf_counter() - loss_t0:.2f}s level_total={time.perf_counter() - level_t0:.2f}s")
+                if self.interaction_global_aux_weight > 0.0 and global_scores is not None:
+                    global_loss = self._get_loss_from_scores(
+                        pos_scores=global_scores,
+                        neg_scores=None,
+                        offset=offset,
+                        row_mask=row_mask,
+                    )
+                    level_loss = level_loss + global_loss * float(self.interaction_global_aux_weight)
+                    loss_stats[f'global_aux_{label}'] = global_loss.detach()
+                total_loss = total_loss + level_loss * weight
+                loss_stats[f"mrl_{label}"] = level_loss.detach()
+                loss_stats[f"mrl_active_ratio_{label}"] = row_mask.float().mean().detach()
+                for key, value in score_stats.items():
+                    loss_stats[f'{key}_{label}'] = value
+
+            loss_stats["mrl_query_has_images_ratio"] = query_has_images.float().mean().detach()
+            loss_stats["mrl_doc_has_images_ratio"] = pos_doc_has_images.float().mean().detach()
+            if neg_doc_has_images is not None:
+                loss_stats["mrl_neg_doc_has_images_ratio"] = neg_doc_has_images.float().mean().detach()
+            loss_stats["mrl_text_text_ratio"] = (~active_levels[:, 0]).float().mean().detach()
+            if timing_enabled:
+                self._timing_log("forward_loss_complete")
         if not bool(getattr(self.folder_homo_config, 'marc_enabled', False)) or self.marc_weight <= 0:
             return total_loss, loss_stats
         if query_input_ids is None or query_attention_mask is None or doc_input_ids is None or doc_attention_mask is None:

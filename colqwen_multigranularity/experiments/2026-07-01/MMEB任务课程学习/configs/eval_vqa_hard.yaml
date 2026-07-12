@@ -1,0 +1,40 @@
+MMEB-eval-InfographicsVQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-InfographicsVQA-beir-v3
+
+MMEB-eval-ChartQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-ChartQA-beir-v3
+
+MMEB-eval-A-OKVQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-A-OKVQA-beir-v3
+
+MMEB-eval-DocVQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-DocVQA-beir-v3
+
+MMEB-eval-OK-VQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-OK-VQA-beir-v3
+
+MMEB-eval-Visual7W-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-Visual7W-beir-v3
+
+MMEB-eval-GQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-GQA-beir-v3
+
+MMEB-eval-TextVQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-TextVQA-beir-v3
+
+MMEB-eval-ScienceQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-ScienceQA-beir-v3
+
+MMEB-eval-VizWiz-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VizWiz-beir-v3
+

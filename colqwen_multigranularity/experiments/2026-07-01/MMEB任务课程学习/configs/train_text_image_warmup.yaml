@@ -1,0 +1,9 @@
+# Stable text/image retrieval warmup pool.
+
+MSCOCO_t2i: {"weight": 1.0, "num_samples": 100000}
+MSCOCO_i2t: {"weight": 1.0, "num_samples": 100000}
+VisualNews_t2i: {"weight": 1.0, "num_samples": 100000}
+VisualNews_i2t: {"weight": 1.0, "num_samples": 100000}
+VisDial: {"weight": 1.0, "num_samples": 50000}
+WebQA: {"weight": 1.0, "num_samples": 50000}
+

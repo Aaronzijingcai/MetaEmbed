@@ -1,0 +1,18 @@
+# VQA-hard plus a small replay pool to test whether target gains can be retained.
+# Replay weights are intentionally lower than hard-task weights.
+
+InfographicsVQA: {"weight": 1.0, "num_samples": 50000}
+ChartQA: {"weight": 1.0, "num_samples": 50000}
+A-OKVQA: {"weight": 1.0, "num_samples": 50000}
+DocVQA: {"weight": 1.0, "num_samples": 50000}
+OK-VQA: {"weight": 1.0, "num_samples": 10000}
+Visual7W: {"weight": 1.0, "num_samples": 50000}
+
+# Replay / retention anchors.
+MSCOCO_t2i: {"weight": 0.25, "num_samples": 25000}
+MSCOCO_i2t: {"weight": 0.25, "num_samples": 25000}
+VisualNews_t2i: {"weight": 0.25, "num_samples": 25000}
+VisualNews_i2t: {"weight": 0.25, "num_samples": 25000}
+VisDial: {"weight": 0.25, "num_samples": 12500}
+WebQA: {"weight": 0.25, "num_samples": 12500}
+

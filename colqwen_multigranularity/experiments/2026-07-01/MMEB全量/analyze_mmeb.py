@@ -90,6 +90,19 @@ DATA_GROUP_CLASS = {
     "Visual Grounding": ["MSCOCO", "RefCOCO", "RefCOCO-Matching", "Visual7W-Pointing"],
 }
 
+REPORT_METRIC_ALIAS = {
+    "recall_at_1": "precision_at_1",
+    "recall_at_5": "precision_at_5",
+}
+
+
+def _metric_candidates(metric_name: str) -> list[str]:
+    if metric_name == "precision_at_1":
+        return ["precision_at_1", "recall_at_1"]
+    if metric_name == "precision_at_5":
+        return ["precision_at_5", "recall_at_5"]
+    return [metric_name]
+
 
 def _dataset_name(metric_key: str) -> str | None:
     prefix = "MMEB-eval-"
@@ -102,8 +115,10 @@ def _dataset_name(metric_key: str) -> str | None:
 def _metric_value(metrics: dict, dataset: str, metric_name: str) -> float | None:
     key = f"MMEB-eval-{dataset}-beir"
     value = metrics.get(key)
-    if isinstance(value, dict) and metric_name in value:
-        return float(value[metric_name])
+    if isinstance(value, dict):
+        for candidate in _metric_candidates(metric_name):
+            if candidate in value:
+                return float(value[candidate])
     return None
 
 
@@ -126,20 +141,30 @@ def main() -> None:
     metrics_path = Path(args.metrics_json)
     metrics = json.loads(metrics_path.read_text())
     metric_name = str(args.metric)
+    report_metric = REPORT_METRIC_ALIAS.get(metric_name, metric_name)
     rows = []
     for key, value in metrics.items():
         dataset = _dataset_name(key)
-        if dataset is None or not isinstance(value, dict) or metric_name not in value:
+        if dataset is None or not isinstance(value, dict):
             continue
-        rows.append({"dataset": dataset, metric_name: float(value[metric_name])})
-    rows.sort(key=lambda item: item[metric_name])
+        metric_value = None
+        for candidate in _metric_candidates(metric_name):
+            if candidate in value:
+                metric_value = float(value[candidate])
+                break
+        if metric_value is None:
+            continue
+        rows.append({"dataset": dataset, report_metric: metric_value})
+    rows.sort(key=lambda item: item[report_metric])
 
     summary = {
         "metric": metric_name,
+        "report_metric": report_metric,
         "num_datasets": len(rows),
-        "overall": mean([row[metric_name] for row in rows]) if rows else None,
+        "overall": mean([row[report_metric] for row in rows]) if rows else None,
         "group": {},
         "class": {},
+        "per_dataset": rows,
         "worst10": rows[:10],
         "best10": rows[-10:][::-1],
     }

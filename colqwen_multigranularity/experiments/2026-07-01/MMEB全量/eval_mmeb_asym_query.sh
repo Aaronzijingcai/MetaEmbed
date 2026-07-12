@@ -7,6 +7,8 @@ CHECKPOINT=${1:-${CHECKPOINT:-$SCRIPT_DIR/runs/folder_homo_mmeb_full_train_b160_
 ASYM_QUERY_BUDGET_SETS_STR=${ASYM_QUERY_BUDGET_SETS:-"80,80,80 40,40,40"}
 read -r -a ASYM_QUERY_BUDGET_SETS_ARRAY <<< "$ASYM_QUERY_BUDGET_SETS_STR"
 BASE_OUT_DIR=${BASE_OUT_DIR:-}
+export MAXSIM_INTERACTION=${MAXSIM_INTERACTION:-q2d}
+export MAXSIM_QUERY_AGG=${MAXSIM_QUERY_AGG:-mean}
 
 if [[ ! -d "$CHECKPOINT" ]]; then
   echo "checkpoint directory not found: $CHECKPOINT" >&2
@@ -30,7 +32,7 @@ for budget_set in "${ASYM_QUERY_BUDGET_SETS_ARRAY[@]}"; do
   fi
   export LOG_DIR="${LOG_DIR:-$run_dir/logs}"
   export LOG_FILE="$LOG_DIR/eval_mmeb_full_asym_${suffix}_$(date +%Y%m%d_%H%M%S).log"
-  echo "[mmeb_asym_query] running query-image budgets=$b1/$b2/$b3 doc budgets=160/160/160"
+  echo "[mmeb_asym_query] running query-image budgets=$b1/$b2/$b3 doc budgets=160/160/160 interaction=$MAXSIM_INTERACTION query_agg=$MAXSIM_QUERY_AGG"
   bash "$SCRIPT_DIR/eval_mmeb_full.sh" "$CHECKPOINT"
   unset OUT_DIR LOG_FILE ASYM_QUERY_IMAGE_BUDGETS
 done

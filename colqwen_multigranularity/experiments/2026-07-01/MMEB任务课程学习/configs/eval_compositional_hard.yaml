@@ -1,0 +1,16 @@
+MMEB-eval-CIRR-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-CIRR-beir-v3
+
+MMEB-eval-NIGHTS-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-NIGHTS-beir-v3
+
+MMEB-eval-FashionIQ-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-FashionIQ-beir-v3
+
+MMEB-eval-EDIS-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-EDIS-beir-v3
+

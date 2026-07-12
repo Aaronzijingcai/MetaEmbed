@@ -1,0 +1,44 @@
+MMEB-eval-ImageNet-1K-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-ImageNet-1K-beir-v3
+
+MMEB-eval-VOC2007-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VOC2007-beir-v3
+
+MMEB-eval-VisualNews_i2t-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VisualNews_i2t-beir-v3
+
+MMEB-eval-VisualNews_t2i-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VisualNews_t2i-beir-v3
+
+MMEB-eval-MSCOCO_i2t-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-MSCOCO_i2t-beir-v3
+
+MMEB-eval-MSCOCO_t2i-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-MSCOCO_t2i-beir-v3
+
+MMEB-eval-WebQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-WebQA-beir-v3
+
+MMEB-eval-VisDial-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-VisDial-beir-v3
+
+MMEB-eval-ChartQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-ChartQA-beir-v3
+
+MMEB-eval-GQA-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-GQA-beir-v3
+
+MMEB-eval-CIRR-beir:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../../data_dir/MMEB-eval-beir-v3/MMEB-eval-CIRR-beir-v3
+

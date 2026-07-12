@@ -1,0 +1,552 @@
+[
+  {
+    "dataset": "FashionIQ",
+    "queries": 1000,
+    "corpus": 5992,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 26,
+    "neg_text_len_median": 26,
+    "local_unique_text_ratio_mean": 0.001,
+    "local_all_same_text_ratio": 1.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Find an image to match the fashion image and style note: Is shiny and silver wit...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      },
+      {
+        "query": "Find an image to match the fashion image and style note: Is grey with black desi...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      },
+      {
+        "query": "Find an image to match the fashion image and style note: Is a solid red color an...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      }
+    ]
+  },
+  {
+    "dataset": "Country211",
+    "queries": 1000,
+    "corpus": 211,
+    "local_candidates_mean": 211.0,
+    "local_candidates_median": 211,
+    "local_candidates_min": 211,
+    "local_candidates_max": 211,
+    "pos_text_len_median": 8,
+    "neg_text_len_median": 8,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Identify the country depicted in the image",
+        "candidate_count": 211,
+        "gt_text": "Fiji",
+        "neg_texts": [
+          "Liechtenstein",
+          "Solomon Islands",
+          "Sint Maarten",
+          "Colombia",
+          "Greenland"
+        ],
+        "unique_texts_in_local": 211
+      },
+      {
+        "query": "Identify the country depicted in the image",
+        "candidate_count": 211,
+        "gt_text": "Maldives",
+        "neg_texts": [
+          "Fiji",
+          "Liechtenstein",
+          "Solomon Islands",
+          "Sint Maarten",
+          "Colombia"
+        ],
+        "unique_texts_in_local": 211
+      },
+      {
+        "query": "Identify the country depicted in the image",
+        "candidate_count": 211,
+        "gt_text": "French Guiana",
+        "neg_texts": [
+          "Fiji",
+          "Liechtenstein",
+          "Solomon Islands",
+          "Sint Maarten",
+          "Colombia"
+        ],
+        "unique_texts_in_local": 211
+      }
+    ]
+  },
+  {
+    "dataset": "CIRR",
+    "queries": 1000,
+    "corpus": 2197,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 26,
+    "neg_text_len_median": 26,
+    "local_unique_text_ratio_mean": 0.001,
+    "local_all_same_text_ratio": 1.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Given an image, find a similar everyday image with the described changes: Show t...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      },
+      {
+        "query": "Given an image, find a similar everyday image with the described changes: Fewer ...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      },
+      {
+        "query": "Given an image, find a similar everyday image with the described changes: Two an...",
+        "candidate_count": 1000,
+        "gt_text": "Represent the given image.",
+        "neg_texts": [
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image.",
+          "Represent the given image."
+        ],
+        "unique_texts_in_local": 1
+      }
+    ]
+  },
+  {
+    "dataset": "InfographicsVQA",
+    "queries": 1000,
+    "corpus": 1730,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 5,
+    "neg_text_len_median": 8,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: Which social platform has...",
+        "candidate_count": 1000,
+        "gt_text": "pinterest",
+        "neg_texts": [
+          "runny nose, cough, sore throat",
+          "167,000",
+          "$59.5b",
+          "ebola, 224k",
+          "2.5b"
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: Which three business type...",
+        "candidate_count": 1000,
+        "gt_text": "restaurants, interior design, wedding venues",
+        "neg_texts": [
+          "runny nose, cough, sore throat",
+          "ebola, 224k",
+          "plastic",
+          "295",
+          "4146"
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: Which two platforms are g...",
+        "candidate_count": 1000,
+        "gt_text": "linkedin, facebook",
+        "neg_texts": [
+          "pinterest",
+          "runny nose, cough, sore throat",
+          "167,000",
+          "2.5b",
+          "4146"
+        ],
+        "unique_texts_in_local": 1000
+      }
+    ]
+  },
+  {
+    "dataset": "Visual7W",
+    "queries": 1000,
+    "corpus": 3480,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 8,
+    "neg_text_len_median": 13,
+    "local_unique_text_ratio_mean": 0.997471,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: What color is the sidewal...",
+        "candidate_count": 1000,
+        "gt_text": "Gray.",
+        "neg_texts": [
+          "To receive orders.",
+          "Plates.",
+          "Person with camera.",
+          "A video game controller.",
+          "Toast."
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: Where is the man sitting?",
+        "candidate_count": 1000,
+        "gt_text": "At the computer.",
+        "neg_texts": [
+          "To receive orders.",
+          "Person with camera.",
+          "A windsurfer.",
+          "At a stop sign.",
+          "A tree."
+        ],
+        "unique_texts_in_local": 998
+      },
+      {
+        "query": "Represent the given image with the following question: What is in the photo?",
+        "candidate_count": 1000,
+        "gt_text": "Food.",
+        "neg_texts": [
+          "Gray.",
+          "At a stop sign.",
+          "Hotel emblem.",
+          "At the circus.",
+          "Monks."
+        ],
+        "unique_texts_in_local": 998
+      }
+    ]
+  },
+  {
+    "dataset": "GQA",
+    "queries": 1000,
+    "corpus": 6850,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 31,
+    "neg_text_len_median": 33,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: What is this bird called?",
+        "candidate_count": 1000,
+        "gt_text": "This is a parrot.",
+        "neg_texts": [
+          "Yes, there is a clock that is gold.",
+          "Yes, there are both a bed and a picture.",
+          "No, both the cap and the sign are blue.",
+          "The girl smiles at the phone.",
+          "No, the shoes are black and the socks are white."
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: What color is the helmet ...",
+        "candidate_count": 1000,
+        "gt_text": "The helmet is light blue.",
+        "neg_texts": [
+          "This is a parrot.",
+          "The juice is in the top of the image.",
+          "No, the hat is tan.",
+          "The trees are green.",
+          "The vase is in the bottom of the image."
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: Is it an indoors or outdo...",
+        "candidate_count": 1000,
+        "gt_text": "It is indoors.",
+        "neg_texts": [
+          "The girl smiles at the phone.",
+          "The juice is in the top of the image.",
+          "The plate is square.",
+          "Yes, the pouch is green.",
+          "No, there are no spiders or dragons."
+        ],
+        "unique_texts_in_local": 1000
+      }
+    ]
+  },
+  {
+    "dataset": "ChartQA",
+    "queries": 1000,
+    "corpus": 1601,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 4,
+    "neg_text_len_median": 5,
+    "local_unique_text_ratio_mean": 0.99841,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: How many food item is sho...",
+        "candidate_count": 1000,
+        "gt_text": "14",
+        "neg_texts": [
+          "11.8",
+          "10878",
+          "[2003, 2004]",
+          "Chinese",
+          "108"
+        ],
+        "unique_texts_in_local": 999
+      },
+      {
+        "query": "Represent the given image with the following question: What is the difference in...",
+        "candidate_count": 1000,
+        "gt_text": "0.57",
+        "neg_texts": [
+          "14",
+          "11.8",
+          "10878",
+          "[2003, 2004]",
+          "108"
+        ],
+        "unique_texts_in_local": 999
+      },
+      {
+        "query": "Represent the given image with the following question: How many bars are shown i...",
+        "candidate_count": 1000,
+        "gt_text": "3",
+        "neg_texts": [
+          "14",
+          "11.8",
+          "[2003, 2004]",
+          "327",
+          "6.99"
+        ],
+        "unique_texts_in_local": 999
+      }
+    ]
+  },
+  {
+    "dataset": "A-OKVQA",
+    "queries": 1000,
+    "corpus": 894,
+    "local_candidates_mean": 894.0,
+    "local_candidates_median": 894,
+    "local_candidates_min": 894,
+    "local_candidates_max": 894,
+    "pos_text_len_median": 7,
+    "neg_text_len_median": 7,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: What is in the motorcycli...",
+        "candidate_count": 894,
+        "gt_text": "cigarette",
+        "neg_texts": [
+          "1000",
+          "eleven",
+          "i do",
+          "malaysia",
+          "trophy"
+        ],
+        "unique_texts_in_local": 894
+      },
+      {
+        "query": "Represent the given image with the following question: Which number birthday is ...",
+        "candidate_count": 894,
+        "gt_text": "thirty",
+        "neg_texts": [
+          "cigarette",
+          "1000",
+          "eleven",
+          "i do",
+          "malaysia"
+        ],
+        "unique_texts_in_local": 894
+      },
+      {
+        "query": "Represent the given image with the following question: What best describes the p...",
+        "candidate_count": 894,
+        "gt_text": "dirty",
+        "neg_texts": [
+          "cigarette",
+          "1000",
+          "eleven",
+          "i do",
+          "malaysia"
+        ],
+        "unique_texts_in_local": 894
+      }
+    ]
+  },
+  {
+    "dataset": "ScienceQA",
+    "queries": 1000,
+    "corpus": 736,
+    "local_candidates_mean": 736.0,
+    "local_candidates_median": 736,
+    "local_candidates_min": 736,
+    "local_candidates_max": 736,
+    "pos_text_len_median": 10,
+    "neg_text_len_median": 15,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.0,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: Which of the following co...",
+        "candidate_count": 736,
+        "gt_text": "how steady a parachute with a 1 m vent was at 200 km per hour",
+        "neg_texts": [
+          "climate",
+          "Bryum moss plants are made up of tiny units called cells.",
+          "chirping",
+          "Grenada",
+          "kelp bass"
+        ],
+        "unique_texts_in_local": 736
+      },
+      {
+        "query": "Represent the given image with the following question: What is the name of the c...",
+        "candidate_count": 736,
+        "gt_text": "New Hampshire",
+        "neg_texts": [
+          "how steady a parachute with a 1 m vent was at 200 km per hour",
+          "climate",
+          "Bryum moss plants are made up of tiny units called cells.",
+          "chirping",
+          "Grenada"
+        ],
+        "unique_texts_in_local": 736
+      },
+      {
+        "query": "Represent the given image with the following question: Which of these organisms ...",
+        "candidate_count": 736,
+        "gt_text": "mushroom",
+        "neg_texts": [
+          "how steady a parachute with a 1 m vent was at 200 km per hour",
+          "climate",
+          "Bryum moss plants are made up of tiny units called cells.",
+          "chirping",
+          "Grenada"
+        ],
+        "unique_texts_in_local": 736
+      }
+    ]
+  },
+  {
+    "dataset": "OK-VQA",
+    "queries": 1000,
+    "corpus": 2555,
+    "local_candidates_mean": 1000.0,
+    "local_candidates_median": 1000,
+    "local_candidates_min": 1000,
+    "local_candidates_max": 1000,
+    "pos_text_len_median": 6,
+    "neg_text_len_median": 7,
+    "local_unique_text_ratio_mean": 1.0,
+    "local_all_same_text_ratio": 0.0,
+    "local_empty_text_frac_mean": 0.000386,
+    "examples": [
+      {
+        "query": "Represent the given image with the following question: What sport can you use th...",
+        "candidate_count": 1000,
+        "gt_text": "race",
+        "neg_texts": [
+          "bake it",
+          "dry hand",
+          "pun",
+          "philadelphia",
+          "band"
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: Name the type of plant th...",
+        "candidate_count": 1000,
+        "gt_text": "vine",
+        "neg_texts": [
+          "bake it",
+          "dry hand",
+          "philadelphia",
+          "delivery",
+          "free"
+        ],
+        "unique_texts_in_local": 1000
+      },
+      {
+        "query": "Represent the given image with the following question: What toy is this?",
+        "candidate_count": 1000,
+        "gt_text": "stuffed animal",
+        "neg_texts": [
+          "race",
+          "dry hand",
+          "pun",
+          "french open",
+          "levis"
+        ],
+        "unique_texts_in_local": 1000
+      }
+    ]
+  }
+]

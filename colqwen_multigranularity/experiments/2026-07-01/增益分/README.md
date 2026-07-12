@@ -49,7 +49,7 @@ relative + trainable + coarse-anchor-aware
 | 重要分 | 原始 MLP saliency |
 | 相似分 | 原始 FOLDER cosine merge score |
 | 训练数据 | 与 baseline 相同的 MoCa / MetaEmbed 配置 |
-| 训练预算 | 默认 3k step；若超过或接近 baseline，再考虑更长训练 |
+| 训练预算 | 先用 4k step 筛选；若超过或接近 baseline，再考虑更长训练 |
 | 评测 | ViDoReV1, ViDoReV2, MMEB text-query focus 三组 |
 
 唯一变量：
@@ -120,41 +120,57 @@ Baseline 复现：
 
 ```bash
 cd /Users/czj/MetaEmbed_github_20260623/colqwen_multigranularity/experiments/2026-07-01/增益分
-GAIN_MODE=hard_max RUN_NAME=folder_gain_only_v1_hard_max_b160_160_160_3k bash run_train.sh
+GAIN_MODE=hard_max RUN_NAME=folder_gain_only_v1_hard_max_b160_160_160_4k bash run_train.sh
 ```
 
 P0-1 trainable metric residual：
 
 ```bash
 GAIN_MODE=learned_metric_residual GAIN_TAU=0.07 \
-RUN_NAME=folder_gain_only_v1_learned_metric_residual_b160_160_160_3k bash run_train.sh
+RUN_NAME=folder_gain_only_v1_learned_metric_residual_b160_160_160_4k bash run_train.sh
 ```
 
 P0-2 cross-anchor gate：
 
 ```bash
 GAIN_MODE=learned_anchor_gate \
-RUN_NAME=folder_gain_only_v1_learned_anchor_gate_b160_160_160_3k bash run_train.sh
+RUN_NAME=folder_gain_only_v1_learned_anchor_gate_b160_160_160_4k bash run_train.sh
 ```
 
 P1 reconstruction residual：
 
 ```bash
 GAIN_MODE=learned_reconstruction_residual \
-RUN_NAME=folder_gain_only_v1_learned_reconstruction_residual_b160_160_160_3k bash run_train.sh
+RUN_NAME=folder_gain_only_v1_learned_reconstruction_residual_b160_160_160_4k bash run_train.sh
 ```
 
-临时检查训练和测试代码已删除；正式进度请看 `PROGRESS.md`。
+Smoke 训练和测试：
+
+```bash
+GAIN_MODE=learned_metric_residual bash smoke_train_eval.sh
+GAIN_MODE=learned_anchor_gate bash smoke_train_eval.sh
+GAIN_MODE=learned_reconstruction_residual bash smoke_train_eval.sh
+```
 
 评测：
 
 ```bash
-GAIN_MODE=learned_metric_residual bash eval_3sets.sh runs/folder_gain_only_v1_learned_metric_residual_b160_160_160_3k/checkpoint-3000
-GAIN_MODE=learned_anchor_gate bash eval_3sets.sh runs/folder_gain_only_v1_learned_anchor_gate_b160_160_160_3k/checkpoint-3000
-GAIN_MODE=learned_reconstruction_residual bash eval_3sets.sh runs/folder_gain_only_v1_learned_reconstruction_residual_b160_160_160_3k/checkpoint-3000
+GAIN_MODE=learned_metric_residual bash eval_3sets.sh runs/folder_gain_only_v1_learned_metric_residual_b160_160_160_4k/checkpoint-4000
+GAIN_MODE=learned_anchor_gate bash eval_3sets.sh runs/folder_gain_only_v1_learned_anchor_gate_b160_160_160_4k/checkpoint-4000
+GAIN_MODE=learned_reconstruction_residual bash eval_3sets.sh runs/folder_gain_only_v1_learned_reconstruction_residual_b160_160_160_4k/checkpoint-4000
 ```
 
 ## 实验结果
+
+结果记录规则：
+
+| 项目 | 必须填写 |
+| --- | --- |
+| Train config | 训练 yaml 或数据配比 |
+| Eval config | ViDoReV1 / ViDoReV2 / MMEB 对应配置 |
+| Checkpoint | 具体 checkpoint 路径 |
+| Token budget | 固定 `160/160/160`，共 480 visual tokens |
+| Metric | ViDoRe / MMEB 三组沿用该实验原有表格口径 |
 
 当前 baseline 锚点：
 

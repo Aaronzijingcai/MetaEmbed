@@ -1,0 +1,7 @@
+# Four-dataset compact training pool for the MMEB worst10 MaxSim study.
+# The goal is to cover the dominant failure modes with a 500-step continuation run.
+
+CIRR: {"weight": 1.0, "num_samples": 50000}
+ChartQA: {"weight": 1.0, "num_samples": 50000}
+A-OKVQA: {"weight": 1.0, "num_samples": 50000}
+Visual7W: {"weight": 1.0, "num_samples": 50000}

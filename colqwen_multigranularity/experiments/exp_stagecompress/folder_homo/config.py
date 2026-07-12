@@ -28,6 +28,13 @@ class FolderHomoConfig:
     marc_dup_threshold: float = 0.88
     marc_anchor_boost: float = 1.0
     marc_anchor_floor: float = 0.05
+    interaction_loss_mode: str = "flat"
+    interaction_bi_lambda: float = 0.5
+    interaction_global_weight: float = 0.0
+    interaction_factorized_local_weight: float = 1.0
+    interaction_global_aux_weight: float = 0.0
+    interaction_query_topk: int = 48
+    interaction_adaptive_ratio: float = 1.5
 
     def active_stage_ids(self) -> Tuple[int, ...]:
         mode = str(self.compress_stages).strip().lower().replace(" ", "")

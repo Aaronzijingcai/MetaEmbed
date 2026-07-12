@@ -10,7 +10,7 @@ from .compression import StageCompressConfig
 
 
 class StageCompressMRLInBatchNegativeLoss(MRLInBatchNegativeLoss):
-    def __init__(self, *, image_token_id: int, compress_config: StageCompressConfig, temperature: float = 0.03, granularities: Sequence[int] = (1, 2, 4), level_weights: Optional[Sequence[float]] = None, normalize_scores: bool = True, use_smooth_max: bool = False, doc_chunk_size: int = 512, pos_aware_negative_filtering: bool = False, max_batch_size: int = 2048, tau: float = 0.1, norm_tol: float = 1e-3, filter_threshold: float = 0.95, filter_factor: float = 0.5) -> None:
+    def __init__(self, *, image_token_id: int, compress_config: StageCompressConfig, temperature: float = 0.03, granularities: Sequence[int] = (1, 2, 4), level_weights: Optional[Sequence[float]] = None, normalize_scores: bool = True, use_smooth_max: bool = False, doc_chunk_size: int = 512, query_chunk_size: Optional[int] = 512, pos_aware_negative_filtering: bool = False, max_batch_size: int = 2048, tau: float = 0.1, norm_tol: float = 1e-3, filter_threshold: float = 0.95, filter_factor: float = 0.5) -> None:
         granularities = normalize_granularities(granularities)
         specs = build_stage_specs(granularities)
         if len(specs) != 3:
@@ -25,6 +25,7 @@ class StageCompressMRLInBatchNegativeLoss(MRLInBatchNegativeLoss):
             normalize_scores=normalize_scores,
             use_smooth_max=use_smooth_max,
             doc_chunk_size=doc_chunk_size,
+            query_chunk_size=query_chunk_size,
             pos_aware_negative_filtering=pos_aware_negative_filtering,
             max_batch_size=max_batch_size,
             tau=tau,

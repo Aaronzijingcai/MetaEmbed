@@ -1,0 +1,13 @@
+# ViDoRe train / visual-document train + MMEB hard/core4 mix for trainable MaxSim experiments.
+# Visual-document corpora are kept with higher weights to protect the ViDoRe v2 mainline.
+
+tevatron_colpali: {"weight": 5.0, "num_samples": 999999}
+visrag_ind: {"weight": 5.0, "num_samples": 999999}
+
+CIRR: {"weight": 1.0, "num_samples": 50000}
+ChartQA: {"weight": 1.0, "num_samples": 50000}
+A-OKVQA: {"weight": 1.0, "num_samples": 50000}
+Visual7W: {"weight": 1.0, "num_samples": 50000}
+InfographicsVQA: {"weight": 1.0, "num_samples": 50000}
+DocVQA: {"weight": 1.0, "num_samples": 50000}
+OK-VQA: {"weight": 0.5, "num_samples": 10000}

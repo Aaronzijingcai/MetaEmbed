@@ -85,12 +85,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--maxsim-query-drop-prefix", type=int, default=0)
     parser.add_argument("--maxsim-query-drop-suffix", type=int, default=0)
     parser.add_argument(
+        "--maxsim-interaction",
+        type=str,
+        default="q2d",
+        choices=[
+            "q2d",
+            "q2d_query_topk",
+            "q2d_query_topk_sum",
+            "d2q_mean",
+            "bi_sum",
+            "bi_mean",
+            "bi_adaptive",
+            "bi_query_topk",
+            "bi_query_topk_sum",
+            "bi_query_topk_adaptive",
+            "bi_query_topk_sum_adaptive",
+            "bi_query_topk_hard_adaptive",
+            "bi_topk_mean",
+            "lse",
+            "bi_lse",
+        ],
+    )
+    parser.add_argument("--maxsim-bi-lambda", type=float, default=0.5)
+    parser.add_argument("--maxsim-lse-beta", type=float, default=20.0)
+    parser.add_argument("--maxsim-global-weight", type=float, default=0.0)
+    parser.add_argument(
         "--maxsim-query-agg",
         type=str,
         default="sum",
         choices=["sum", "mean", "topk_mean"],
     )
     parser.add_argument("--maxsim-query-topk", type=int, default=0)
+    parser.add_argument("--maxsim-adaptive-ratio", type=float, default=1.5)
     parser.add_argument("--maxsim-length-norm-alpha", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-weight", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-threshold", type=float, default=0.35)
@@ -171,10 +197,15 @@ def build_processor(args: argparse.Namespace) -> MultiGranularityColQwen2_5Proce
 
 
 def configure_maxsim_env(args: argparse.Namespace) -> None:
+    os.environ["MURE_MAXSIM_INTERACTION"] = str(getattr(args, "maxsim_interaction", "q2d"))
+    os.environ["MURE_MAXSIM_BI_LAMBDA"] = str(min(max(getattr(args, "maxsim_bi_lambda", 0.5), 0.0), 1.0))
+    os.environ["MURE_MAXSIM_LSE_BETA"] = str(max(getattr(args, "maxsim_lse_beta", 20.0), 1e-6))
+    os.environ["MURE_MAXSIM_GLOBAL_WEIGHT"] = str(min(max(getattr(args, "maxsim_global_weight", 0.0), 0.0), 1.0))
     os.environ["MURE_MAXSIM_QUERY_DROP_PREFIX"] = str(max(getattr(args, "maxsim_query_drop_prefix", 0), 0))
     os.environ["MURE_MAXSIM_QUERY_DROP_SUFFIX"] = str(max(getattr(args, "maxsim_query_drop_suffix", 0), 0))
     os.environ["MURE_MAXSIM_QUERY_AGG"] = str(getattr(args, "maxsim_query_agg", "sum"))
     os.environ["MURE_MAXSIM_QUERY_TOPK"] = str(max(getattr(args, "maxsim_query_topk", 0), 0))
+    os.environ["MURE_MAXSIM_ADAPTIVE_RATIO"] = str(max(getattr(args, "maxsim_adaptive_ratio", 1.5), 1.0))
     os.environ["MURE_MAXSIM_LENGTH_NORM_ALPHA"] = str(max(getattr(args, "maxsim_length_norm_alpha", 0.0), 0.0))
     os.environ["MURE_MAXSIM_HIT_PENALTY_WEIGHT"] = str(max(getattr(args, "maxsim_hit_penalty_weight", 0.0), 0.0))
     threshold = min(max(getattr(args, "maxsim_hit_penalty_threshold", 0.35), 0.0), 1.0)
