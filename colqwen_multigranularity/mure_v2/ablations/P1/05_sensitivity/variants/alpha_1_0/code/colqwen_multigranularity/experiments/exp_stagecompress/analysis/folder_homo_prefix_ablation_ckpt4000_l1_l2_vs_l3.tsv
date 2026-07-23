@@ -1,0 +1,4 @@
+checkpoint	level	visual_tokens	vidore_v1_ndcg5	vidore_v2_ndcg5	mmeb_recall1	avg	status
+4000	level1	160	0.883627	0.590851	0.749250	0.741243	ok
+4000	level2	320	0.891973	0.597259	0.757500	0.748911	ok
+4000	level3_existing	480	0.893394	0.602780	0.764250	0.753475	ok

@@ -1,0 +1,104 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "sensitivity",
+  "base": {
+    "priority": "P1"
+  },
+  "variants": {
+    "alpha_0_5": {
+      "description": "Importance coefficient alpha=0.5.",
+      "environment": {
+        "FOLDER_ALPHA": 0.5,
+        "MAIN_PROCESS_PORT": 29920
+      }
+    },
+    "alpha_1_0": {
+      "description": "Importance coefficient alpha=1.0.",
+      "environment": {
+        "FOLDER_ALPHA": 1.0,
+        "MAIN_PROCESS_PORT": 29921
+      }
+    },
+    "alpha_2_0": {
+      "description": "Importance coefficient alpha=2.0.",
+      "environment": {
+        "FOLDER_ALPHA": 2.0,
+        "MAIN_PROCESS_PORT": 29922
+      }
+    },
+    "beta_0_5": {
+      "description": "Gain coefficient beta=0.5.",
+      "environment": {
+        "NOVELTY_WEIGHT": 0.5,
+        "MAIN_PROCESS_PORT": 29923
+      }
+    },
+    "beta_1_0": {
+      "description": "Gain coefficient beta=1.0.",
+      "environment": {
+        "NOVELTY_WEIGHT": 1.0,
+        "MAIN_PROCESS_PORT": 29924
+      }
+    },
+    "beta_2_0": {
+      "description": "Gain coefficient beta=2.0.",
+      "environment": {
+        "NOVELTY_WEIGHT": 2.0,
+        "MAIN_PROCESS_PORT": 29925
+      }
+    },
+    "topk_16": {
+      "description": "Adaptive bidirectional interaction with K=16.",
+      "environment": {
+        "INTERACTION_QUERY_TOPK": 16,
+        "MAIN_PROCESS_PORT": 29926
+      }
+    },
+    "topk_32": {
+      "description": "Adaptive bidirectional interaction with K=32.",
+      "environment": {
+        "INTERACTION_QUERY_TOPK": 32,
+        "MAIN_PROCESS_PORT": 29927
+      }
+    },
+    "topk_48": {
+      "description": "Adaptive bidirectional interaction with K=48.",
+      "environment": {
+        "INTERACTION_QUERY_TOPK": 48,
+        "MAIN_PROCESS_PORT": 29928
+      }
+    },
+    "topk_64": {
+      "description": "Adaptive bidirectional interaction with K=64.",
+      "environment": {
+        "INTERACTION_QUERY_TOPK": 64,
+        "MAIN_PROCESS_PORT": 29929
+      }
+    },
+    "rho_0_7": {
+      "description": "Adaptive bidirectional direction cap rho=0.7.",
+      "environment": {
+        "INTERACTION_BI_LAMBDA": 0.7,
+        "MAIN_PROCESS_PORT": 29930
+      }
+    },
+    "rho_0_8": {
+      "description": "Adaptive bidirectional direction cap rho=0.8.",
+      "environment": {
+        "INTERACTION_BI_LAMBDA": 0.8,
+        "MAIN_PROCESS_PORT": 29931
+      }
+    },
+    "rho_0_9": {
+      "description": "Adaptive bidirectional direction cap rho=0.9.",
+      "environment": {
+        "INTERACTION_BI_LAMBDA": 0.9,
+        "MAIN_PROCESS_PORT": 29932
+      }
+    },
+    "source_destination_split": {
+      "status": "pending_implementation",
+      "description": "Parity, random, and spatial source-destination partitions."
+    }
+  }
+}

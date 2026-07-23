@@ -1,0 +1,36 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "hierarchy_and_mrl",
+  "variants": {
+    "hierarchical_with_mrl": {
+      "description": "Hierarchical residual compression with supervision on all three prefixes.",
+      "environment": {
+        "GRANULARITY_LOSS_WEIGHTS": "1 1 1",
+        "MAIN_PROCESS_PORT": 29810
+      }
+    },
+    "hierarchical_without_mrl": {
+      "description": "Hierarchical residual compression supervised only at the complete prefix.",
+      "environment": {
+        "GRANULARITY_LOSS_WEIGHTS": "0 0 1",
+        "MAIN_PROCESS_PORT": 29811
+      }
+    },
+    "flat_with_mrl": {
+      "description": "Flat matched-budget compression with supervision on all three prefixes.",
+      "environment": {
+        "ORGANIZATION_MODE": "flat",
+        "GRANULARITY_LOSS_WEIGHTS": "1 1 1",
+        "MAIN_PROCESS_PORT": 29812
+      }
+    },
+    "flat_without_mrl": {
+      "description": "Flat matched-budget compression supervised only at the complete prefix.",
+      "environment": {
+        "ORGANIZATION_MODE": "flat",
+        "GRANULARITY_LOSS_WEIGHTS": "0 0 1",
+        "MAIN_PROCESS_PORT": 29813
+      }
+    }
+  }
+}

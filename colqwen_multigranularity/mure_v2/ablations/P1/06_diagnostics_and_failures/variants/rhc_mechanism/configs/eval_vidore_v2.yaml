@@ -1,0 +1,29 @@
+# eval_dataset_loader: let's test w/ english only for now
+# drop those datasets w/ multilingual labels
+esg_reports_human_labeled_v2:  # english only
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/esg_reports_human_labeled_v2
+
+esg_reports_v2_multilingual:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/esg_reports_v2
+
+esg_reports_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/esg_reports_eng_v2
+
+biomedical_lectures_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/biomedical_lectures_eng_v2
+
+biomedical_lectures_v2_multilingual:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/biomedical_lectures_v2
+
+economics_reports_v2:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/economics_reports_eng_v2
+
+economics_reports_v2_multilingual:
+  (): colpali_engine.utils.dataset_transformation.TestSetFactoryBEIR
+  dataset_path: !path ../../../data_dir/vidore-v2/economics_reports_v2

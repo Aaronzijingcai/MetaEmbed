@@ -1,0 +1,35 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "prefix_analysis",
+  "base": {
+    "priority": "P1",
+    "status": "eval_only",
+    "backend": "prefix_evaluation"
+  },
+  "variants": {
+    "mrl_e1": {
+      "description": "First prefix from the MRL-trained model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 1, "SOURCE_VARIANT": "hierarchical_with_mrl"}
+    },
+    "mrl_e2": {
+      "description": "Second prefix from the MRL-trained model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 2, "SOURCE_VARIANT": "hierarchical_with_mrl"}
+    },
+    "mrl_e3": {
+      "description": "Complete prefix from the MRL-trained model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 3, "SOURCE_VARIANT": "hierarchical_with_mrl"}
+    },
+    "no_mrl_e1": {
+      "description": "First prefix from the final-prefix-only model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 1, "SOURCE_VARIANT": "hierarchical_without_mrl"}
+    },
+    "no_mrl_e2": {
+      "description": "Second prefix from the final-prefix-only model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 2, "SOURCE_VARIANT": "hierarchical_without_mrl"}
+    },
+    "no_mrl_e3": {
+      "description": "Complete prefix from the final-prefix-only model.",
+      "environment": {"EVAL_PREFIX_LEVEL": 3, "SOURCE_VARIANT": "hierarchical_without_mrl"}
+    }
+  }
+}

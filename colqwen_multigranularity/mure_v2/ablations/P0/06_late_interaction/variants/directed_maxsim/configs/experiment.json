@@ -1,0 +1,30 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "late_interaction",
+  "variants": {
+    "directed_maxsim": {
+      "description": "Standard directed MaxSim using query-to-candidate sum aggregation.",
+      "environment": {
+        "INTERACTION_LOSS_MODE": "q2d_sum",
+        "INTERACTION_BI_LAMBDA": 0.5,
+        "MAIN_PROCESS_PORT": 29840
+      }
+    },
+    "directed_topk48_mean": {
+      "description": "Directed TopK-mean over the strongest 48 query-side matches.",
+      "environment": {
+        "INTERACTION_LOSS_MODE": "q2d_query_topk",
+        "INTERACTION_BI_LAMBDA": 0.5,
+        "MAIN_PROCESS_PORT": 29841
+      }
+    },
+    "adaptive_bidirectional_topk48_mean": {
+      "description": "Final adaptive bidirectional TopK-mean interaction.",
+      "environment": {
+        "INTERACTION_LOSS_MODE": "bi_query_topk_adaptive",
+        "INTERACTION_BI_LAMBDA": 0.8,
+        "MAIN_PROCESS_PORT": 29842
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "compression_operators",
+  "base": {
+    "status": "pending_protocol_alignment"
+  },
+  "variants": {
+    "full_token_mrl": {
+      "status": "ready",
+      "backend": "rhc",
+      "description": "Uncompressed MRL reference under the complete data and training protocol.",
+      "environment": {
+        "COMPRESS_STAGES": "none",
+        "MAIN_PROCESS_PORT": 29819
+      }
+    },
+    "visionzip": {
+      "status": "ready",
+      "backend": "mlppost",
+      "description": "Post-projection VisionZip at the matched 384-token budget.",
+      "environment": {
+        "METHOD": "strategy4_visionzip",
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0,
+        "MAIN_PROCESS_PORT": 29821
+      }
+    },
+    "folder": {
+      "status": "ready",
+      "backend": "mlppost",
+      "description": "Post-projection FOLDER at the matched 384-token budget.",
+      "environment": {
+        "METHOD": "strategy5_folder",
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0,
+        "MAIN_PROCESS_PORT": 29822
+      }
+    },
+    "scope": {
+      "status": "ready",
+      "backend": "mlppost",
+      "description": "Post-projection SCOPE at the matched 384-token budget.",
+      "environment": {
+        "METHOD": "strategy6_scope",
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0,
+        "MAIN_PROCESS_PORT": 29823
+      }
+    },
+    "stage_resampler": {
+      "status": "ready",
+      "backend": "mlppost",
+      "description": "Learnable stage resampler at the matched 384-token budget.",
+      "environment": {
+        "METHOD": "strategy7_stage_resampler",
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0,
+        "MAIN_PROCESS_PORT": 29824
+      }
+    },
+    "light_colpali": {
+      "status": "eval_only",
+      "backend": "light_colpali",
+      "description": "Light-ColPali-style post-MLLM clustering at the matched 384-token budget."
+    },
+    "rhc": {
+      "status": "ready",
+      "backend": "rhc",
+      "description": "RHC reference at the matched 384-token budget.",
+      "environment": {
+        "MAIN_PROCESS_PORT": 29820
+      }
+    }
+  }
+}

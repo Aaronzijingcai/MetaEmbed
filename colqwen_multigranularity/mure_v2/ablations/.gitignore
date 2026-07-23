@@ -1,0 +1,13 @@
+P0/**/runs/
+P1/**/runs/
+**/__pycache__/
+**/*.py[cod]
+**/.DS_Store
+P0/**/logs/*
+P1/**/logs/*
+P0/**/evaluations/*
+P1/**/evaluations/*
+!P0/**/logs/.gitkeep
+!P1/**/logs/.gitkeep
+!P0/**/evaluations/.gitkeep
+!P1/**/evaluations/.gitkeep

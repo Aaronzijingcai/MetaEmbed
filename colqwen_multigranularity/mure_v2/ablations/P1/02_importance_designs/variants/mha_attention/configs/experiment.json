@@ -1,0 +1,37 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "importance_designs",
+  "base": {
+    "priority": "P1",
+    "backend": "importance_design",
+    "environment": {
+      "ABLATION_KIND": "importance",
+      "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+      "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+      "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0
+    }
+  },
+  "variants": {
+    "mlp_saliency": {
+      "description": "MLP saliency used by the final RHC model.",
+      "environment": {
+        "ABLATION_MODE": "mlp_saliency",
+        "MAIN_PROCESS_PORT": 29904
+      }
+    },
+    "mha_attention": {
+      "description": "Received-attention importance from the archived importance exploration.",
+      "environment": {
+        "ABLATION_MODE": "mha_attn",
+        "MAIN_PROCESS_PORT": 29905
+      }
+    },
+    "learned_gate": {
+      "description": "Gate-head importance from the archived importance exploration.",
+      "environment": {
+        "ABLATION_MODE": "learned_gate",
+        "MAIN_PROCESS_PORT": 29906
+      }
+    }
+  }
+}

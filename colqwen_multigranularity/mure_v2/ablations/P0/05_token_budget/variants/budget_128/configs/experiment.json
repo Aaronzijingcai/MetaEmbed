@@ -1,0 +1,41 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "token_budget",
+  "variants": {
+    "budget_16": {
+      "description": "RHC with 16 tokens retained per granularity.",
+      "environment": {
+        "BUDGETS": "16 16 16",
+        "MAIN_PROCESS_PORT": 29830
+      }
+    },
+    "budget_32": {
+      "description": "RHC with 32 tokens retained per granularity.",
+      "environment": {
+        "BUDGETS": "32 32 32",
+        "MAIN_PROCESS_PORT": 29831
+      }
+    },
+    "budget_64": {
+      "description": "RHC with 64 tokens retained per granularity.",
+      "environment": {
+        "BUDGETS": "64 64 64",
+        "MAIN_PROCESS_PORT": 29832
+      }
+    },
+    "budget_128": {
+      "description": "RHC with 128 tokens retained per granularity.",
+      "environment": {
+        "BUDGETS": "128 128 128",
+        "MAIN_PROCESS_PORT": 29833
+      }
+    },
+    "budget_256": {
+      "description": "RHC with 256 tokens retained per granularity.",
+      "environment": {
+        "BUDGETS": "256 256 256",
+        "MAIN_PROCESS_PORT": 29834
+      }
+    }
+  }
+}

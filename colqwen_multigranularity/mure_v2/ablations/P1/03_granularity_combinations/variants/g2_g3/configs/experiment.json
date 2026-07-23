@@ -1,0 +1,46 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "granularity_combinations",
+  "base": {
+    "priority": "P1",
+    "backend": "rhc"
+  },
+  "variants": {
+    "g1_g2": {
+      "description": "Global and intermediate views under a matched total budget.",
+      "environment": {
+        "INCLUDED_STAGES": "g1+g2",
+        "BUDGETS": "192 192 0",
+        "GRANULARITY_LOSS_WEIGHTS": "1 1 0",
+        "MAIN_PROCESS_PORT": 29910
+      }
+    },
+    "g1_g3": {
+      "description": "Global and fine views under a matched total budget.",
+      "environment": {
+        "INCLUDED_STAGES": "g1+g3",
+        "BUDGETS": "192 0 192",
+        "GRANULARITY_LOSS_WEIGHTS": "1 0 1",
+        "MAIN_PROCESS_PORT": 29911
+      }
+    },
+    "g2_g3": {
+      "description": "Intermediate and fine views under a matched total budget.",
+      "environment": {
+        "INCLUDED_STAGES": "g2+g3",
+        "BUDGETS": "0 192 192",
+        "GRANULARITY_LOSS_WEIGHTS": "0 1 1",
+        "MAIN_PROCESS_PORT": 29912
+      }
+    },
+    "g1_g2_g3": {
+      "description": "Complete three-view representation under the same total budget.",
+      "environment": {
+        "INCLUDED_STAGES": "g1+g2+g3",
+        "BUDGETS": "128 128 128",
+        "GRANULARITY_LOSS_WEIGHTS": "1 1 1",
+        "MAIN_PROCESS_PORT": 29913
+      }
+    }
+  }
+}

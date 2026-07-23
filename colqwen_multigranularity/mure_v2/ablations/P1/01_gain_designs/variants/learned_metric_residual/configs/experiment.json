@@ -1,0 +1,47 @@
+{
+  "defaults": "../../defaults/rhc_formal.json",
+  "suite": "gain_designs",
+  "base": {
+    "priority": "P1"
+  },
+  "variants": {
+    "no_gain": {
+      "description": "Remove cross-granularity gain.",
+      "environment": {
+        "NOVELTY_WEIGHT": 0.0,
+        "MAIN_PROCESS_PORT": 29900
+      }
+    },
+    "one_minus_maxsim": {
+      "description": "Final 1-MaxSim residual gain.",
+      "environment": {
+        "NOVELTY_WEIGHT": 1.0,
+        "MAIN_PROCESS_PORT": 29901
+      }
+    },
+    "learned_metric_residual": {
+      "backend": "gain_design",
+      "description": "Learned metric residual from the archived gain exploration.",
+      "environment": {
+        "ABLATION_KIND": "gain",
+        "ABLATION_MODE": "learned_metric_residual",
+        "MAIN_PROCESS_PORT": 29902,
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0
+      }
+    },
+    "learned_anchor_gate": {
+      "backend": "gain_design",
+      "description": "Learned cross-anchor gate from the archived gain exploration.",
+      "environment": {
+        "ABLATION_KIND": "gain",
+        "ABLATION_MODE": "learned_anchor_gate",
+        "MAIN_PROCESS_PORT": 29903,
+        "MURE_EXPECTED_TRAINABLE_TENSORS": 0,
+        "MURE_EXPECTED_TRAINABLE_NUMEL": 0,
+        "MURE_EXPECTED_FOLDER_HOMO_TENSORS": 0
+      }
+    }
+  }
+}
