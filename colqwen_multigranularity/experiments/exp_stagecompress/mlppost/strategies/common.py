@@ -19,6 +19,12 @@ class StageCompressConfig:
     scorer_heads: int = 8
     scorer_dropout: float = 0.1
     debug_shapes: bool = False
+    interaction_loss_mode: str = "flat"
+    interaction_bi_lambda: float = 0.5
+    interaction_global_weight: float = 0.0
+    interaction_factorized_local_weight: float = 1.0
+    interaction_global_aux_weight: float = 0.0
+    interaction_query_topk: int = 48
 
     def active_stage_ids(self) -> Tuple[int, ...]:
         mode = self.compress_stages.lower()

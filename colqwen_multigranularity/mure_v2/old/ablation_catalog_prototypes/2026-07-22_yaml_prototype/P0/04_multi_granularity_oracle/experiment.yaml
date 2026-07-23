@@ -1,0 +1,14 @@
+suite: multi_granularity_oracle
+base:
+  priority: P0
+  status: eval_only
+  backend: oracle
+variants:
+  g1:
+    description: Global-view single-granularity evaluation.
+  g2:
+    description: Intermediate-view single-granularity evaluation.
+  g3:
+    description: Fine-view single-granularity evaluation.
+  per_query_oracle:
+    description: Ground-truth per-query upper bound over g1, g2, and g3.

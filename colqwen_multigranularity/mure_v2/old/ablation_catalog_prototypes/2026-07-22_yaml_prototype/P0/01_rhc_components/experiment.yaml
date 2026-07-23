@@ -1,0 +1,26 @@
+defaults: ../../defaults/rhc_formal.yaml
+
+suite: rhc_components
+variants:
+  full_rhc:
+    description: Complete RHC reference under the final training and interaction protocol.
+    environment:
+      MAIN_PROCESS_PORT: 29800
+  no_contextualization:
+    status: pending_implementation
+    description: Replace the lightweight contextualizer with an identity mapping.
+  no_importance_protection:
+    description: Remove importance protection from the merge-selection score.
+    environment:
+      FOLDER_ALPHA: 0.0
+      MAIN_PROCESS_PORT: 29801
+  no_cross_granularity_gain:
+    description: Remove the cross-granularity residual gain from token protection.
+    environment:
+      NOVELTY_WEIGHT: 0.0
+      MAIN_PROCESS_PORT: 29802
+  no_value_modulation:
+    description: Disable differentiable value modulation while retaining hard merge selection.
+    environment:
+      GATE_STRENGTH: 0.0
+      MAIN_PROCESS_PORT: 29803

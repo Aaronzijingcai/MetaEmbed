@@ -15,6 +15,9 @@ class FolderHomoConfig:
     tau: float = 1.0
     detach_anchors: bool = True
     use_text_context: bool = False
+    use_contextualizer: bool = True
+    organization_mode: str = "hierarchical"
+    included_stages: str = "all"
     scorer_heads: int = 8
     scorer_dropout: float = 0.1
     debug_shapes: bool = False
@@ -34,7 +37,23 @@ class FolderHomoConfig:
     interaction_factorized_local_weight: float = 1.0
     interaction_global_aux_weight: float = 0.0
     interaction_query_topk: int = 48
-    interaction_adaptive_ratio: float = 1.5
+
+    def normalized_organization_mode(self) -> str:
+        mode = str(self.organization_mode).strip().lower().replace("-", "_")
+        if mode in {"hierarchical", "hierarchy", "residual"}:
+            return "hierarchical"
+        if mode in {"flat", "joint", "mixed"}:
+            return "flat"
+        raise ValueError(f"Unknown organization_mode={self.organization_mode!r}")
+
+    def included_stage_ids(self) -> Tuple[int, ...]:
+        mode = str(self.included_stages).strip().lower().replace(" ", "")
+        if mode in {"all", "g1g2g3", "g1+g2+g3", "g1,g2,g3"}:
+            return (0, 1, 2)
+        parts = [part for part in mode.replace("+", ",").split(",") if part]
+        if parts and all(part in {"g1", "g2", "g3"} for part in parts):
+            return tuple(sorted({int(part[1]) - 1 for part in parts}))
+        raise ValueError(f"Unknown included_stages={self.included_stages!r}")
 
     def active_stage_ids(self) -> Tuple[int, ...]:
         mode = str(self.compress_stages).strip().lower().replace(" ", "")

@@ -1,0 +1,42 @@
+experiment_id: rhc_adaptive_bi_topk48_mean_full
+category: main_model
+status: candidate
+model:
+  name: RHC
+  implementation: colqwen_multigranularity.experiments.exp_stagecompress.folder_homo
+  backbone: models/colqwen2.5-base
+  granularities: [1, 2, 4]
+  retrieval_dim: 128
+compression:
+  type: hierarchical_residual_homogeneity_compression
+  budgets: [128, 128, 128]
+  compress_stages: all
+  mrl_nested_supervision: true
+interaction:
+  type: adaptive_bidirectional_topk_mean
+  train_mode: bi_query_topk_adaptive
+  eval_scorer: bi_topk_mean48_adaptive_lam08
+  topk: 48
+  aggregation: mean
+  lambda_rule: clamp(candidate_len / (query_len + candidate_len), 0.5, 0.8)
+training:
+  data: configs/train/moca_data_ratios_v3_full.yaml
+  max_steps: 60000
+  save_steps: 1000
+  logging_steps: 10
+  per_device_batch_size: 8
+  global_batch_size: 64
+  eval_batch_size: 4
+  interleaved_batch_size: 8
+  gradient_accumulation_steps: 1
+  learning_rate: 1.0e-4
+  scheduler: linear
+  warmup_steps: 0
+  gather_with_grad_mode: torch
+  max_visual_tokens_per_crop: 1024
+  encoder_max_visual_rows: 60000
+  encoder_backward_mode: full
+  gradient_checkpointing_reentrant: true
+  deferred_ddp_reduce: true
+  deferred_ddp_bucket_mb: 64
+  preflight_checkpoint_gate: [1000, 1040]

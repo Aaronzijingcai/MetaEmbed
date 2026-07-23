@@ -100,7 +100,6 @@ def parse_args() -> argparse.Namespace:
             "bi_query_topk_sum",
             "bi_query_topk_adaptive",
             "bi_query_topk_sum_adaptive",
-            "bi_query_topk_hard_adaptive",
             "bi_topk_mean",
             "lse",
             "bi_lse",
@@ -116,7 +115,6 @@ def parse_args() -> argparse.Namespace:
         choices=["sum", "mean", "topk_mean"],
     )
     parser.add_argument("--maxsim-query-topk", type=int, default=0)
-    parser.add_argument("--maxsim-adaptive-ratio", type=float, default=1.5)
     parser.add_argument("--maxsim-length-norm-alpha", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-weight", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-threshold", type=float, default=0.35)
@@ -205,7 +203,6 @@ def configure_maxsim_env(args: argparse.Namespace) -> None:
     os.environ["MURE_MAXSIM_QUERY_DROP_SUFFIX"] = str(max(getattr(args, "maxsim_query_drop_suffix", 0), 0))
     os.environ["MURE_MAXSIM_QUERY_AGG"] = str(getattr(args, "maxsim_query_agg", "sum"))
     os.environ["MURE_MAXSIM_QUERY_TOPK"] = str(max(getattr(args, "maxsim_query_topk", 0), 0))
-    os.environ["MURE_MAXSIM_ADAPTIVE_RATIO"] = str(max(getattr(args, "maxsim_adaptive_ratio", 1.5), 1.0))
     os.environ["MURE_MAXSIM_LENGTH_NORM_ALPHA"] = str(max(getattr(args, "maxsim_length_norm_alpha", 0.0), 0.0))
     os.environ["MURE_MAXSIM_HIT_PENALTY_WEIGHT"] = str(max(getattr(args, "maxsim_hit_penalty_weight", 0.0), 0.0))
     threshold = min(max(getattr(args, "maxsim_hit_penalty_threshold", 0.35), 0.0), 1.0)

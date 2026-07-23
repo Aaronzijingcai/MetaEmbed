@@ -7,6 +7,7 @@ from .strategy4_visionzip import Strategy4VisionZipBlock
 from .strategy5_folder import Strategy5FolderBlock
 from .strategy6_scope import Strategy6ScopeBlock
 from .strategy7_stage_resampler import Strategy7StageResamplerBlock
+from .strategy8_light_colpali import Strategy8LightColPaliBlock
 
 CANONICAL_METHODS = {
     'strategy1_softassign': 'strategy1_softassign',
@@ -34,6 +35,8 @@ CANONICAL_METHODS = {
     'strategy7_stage_resampler': 'strategy7_stage_resampler',
     'stage_resampler': 'strategy7_stage_resampler',
     'resampler': 'strategy7_stage_resampler',
+    'strategy8_light_colpali': 'strategy8_light_colpali',
+    'light_colpali': 'strategy8_light_colpali',
 }
 
 STRATEGY_REGISTRY = {
@@ -44,6 +47,7 @@ STRATEGY_REGISTRY = {
     'strategy5_folder': Strategy5FolderBlock,
     'strategy6_scope': Strategy6ScopeBlock,
     'strategy7_stage_resampler': Strategy7StageResamplerBlock,
+    'strategy8_light_colpali': Strategy8LightColPaliBlock,
 }
 
 

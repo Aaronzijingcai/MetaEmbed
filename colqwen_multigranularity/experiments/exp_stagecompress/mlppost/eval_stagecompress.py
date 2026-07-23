@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
         '--stagecompress-method',
         type=str,
         default='strategy1_softassign',
-        choices=['strategy1_softassign', 'strategy3_prumerge', 'strategy4_visionzip', 'strategy5_folder', 'strategy6_scope', 'strategy7_stage_resampler'],
+        choices=['strategy1_softassign', 'strategy3_prumerge', 'strategy4_visionzip', 'strategy5_folder', 'strategy6_scope', 'strategy7_stage_resampler', 'strategy8_light_colpali'],
     )
     parser.add_argument('--stagecompress-tau', type=float, default=1.0)
     parser.add_argument('--stagecompress-use-text-context', action='store_true', default=False)

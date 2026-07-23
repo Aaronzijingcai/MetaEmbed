@@ -102,7 +102,6 @@ def parse_args() -> argparse.Namespace:
             "bi_query_topk_sum",
             "bi_query_topk_adaptive",
             "bi_query_topk_sum_adaptive",
-            "bi_query_topk_hard_adaptive",
             "bi_topk_mean",
             "lse",
             "bi_lse",
@@ -120,7 +119,6 @@ def parse_args() -> argparse.Namespace:
         choices=["sum", "mean", "topk_mean"],
     )
     parser.add_argument("--maxsim-query-topk", type=int, default=0)
-    parser.add_argument("--maxsim-adaptive-ratio", type=float, default=1.5)
     parser.add_argument("--maxsim-length-norm-alpha", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-weight", type=float, default=0.0)
     parser.add_argument("--maxsim-hit-penalty-threshold", type=float, default=0.35)
@@ -376,7 +374,6 @@ def main() -> None:
                     "maxsim_global_weight": args.maxsim_global_weight,
                     "maxsim_query_agg": args.maxsim_query_agg,
                     "maxsim_query_topk": args.maxsim_query_topk,
-                    "maxsim_adaptive_ratio": args.maxsim_adaptive_ratio,
                     "maxsim_length_norm_alpha": args.maxsim_length_norm_alpha,
                     "maxsim_hit_penalty_weight": args.maxsim_hit_penalty_weight,
                     "maxsim_hit_penalty_threshold": args.maxsim_hit_penalty_threshold,

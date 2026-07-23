@@ -274,6 +274,19 @@ class InterleavedDataset(MMEBTrainsetWrapper):
             f"\n\t\ttotal num rows={sum(num_rows_list)} with {num_rows_list}"
             f"\n\t\tinterleave_batch_size={self.interleaved_batch_size}"
         )
+        resume_skip_rows_per_rank = int(
+            os.environ.get("MURE_DATASET_RESUME_SKIP_ROWS_PER_RANK", "0")
+        )
+        resume_skip_batches = int(
+            os.environ.get("MURE_DATASET_RESUME_SKIP_BATCHES", "0")
+        )
+        probe_skip_rows_per_rank = int(
+            os.environ.get("MURE_PROBE_DATA_SKIP_ROWS_PER_RANK", "0")
+        )
+        if resume_skip_rows_per_rank < 0 or resume_skip_batches < 0 or probe_skip_rows_per_rank < 0:
+            raise ValueError("Dataset resume skip values must be non-negative")
+        if resume_skip_rows_per_rank > 0 and probe_skip_rows_per_rank > 0:
+            raise ValueError("Checkpoint resume skip and probe data skip cannot be combined")
         # because in trainerv2 we don't have distributed data sampler any more,
         # we have to call `split_dataset_by_node`
         if torch.distributed.is_initialized():
@@ -290,6 +303,31 @@ class InterleavedDataset(MMEBTrainsetWrapper):
                 pass  # DistributedSampler will handle the data split
         else:
             raise RuntimeError("Distributed is not initialized...")
+        positioned_skip_rows_per_rank = resume_skip_rows_per_rank or probe_skip_rows_per_rank
+        if positioned_skip_rows_per_rank > 0:
+            distributed = getattr(train_ds, "_distributed", None)
+            if distributed is None or not self.use_split_by_node:
+                raise RuntimeError(
+                    "Dataset-level resume skip requires a distributed IterableDataset"
+                )
+            world_size = torch.distributed.get_world_size()
+            train_ds._distributed = None
+            train_ds = train_ds.skip(positioned_skip_rows_per_rank * world_size)
+            train_ds._distributed = distributed
+            if resume_skip_rows_per_rank > 0:
+                setattr(train_ds, "_mure_dataset_level_resume_skip_batches", resume_skip_batches)
+                setattr(train_ds, "_mure_dataset_level_resume_skip_rows_per_rank", resume_skip_rows_per_rank)
+                rank0_print(
+                    f"[fast-resume-data] rows_per_rank={resume_skip_rows_per_rank} "
+                    f"global_rows={resume_skip_rows_per_rank * world_size} "
+                    f"batches={resume_skip_batches}"
+                )
+            else:
+                setattr(train_ds, "_mure_probe_data_skip_rows_per_rank", probe_skip_rows_per_rank)
+                rank0_print(
+                    f"[probe-data-position] rows_per_rank={probe_skip_rows_per_rank} "
+                    f"global_rows={probe_skip_rows_per_rank * world_size}"
+                )
 
         if self.interleave_eval:
             eval_ds = _interleave_map_style_datasets(

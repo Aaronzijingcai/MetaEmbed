@@ -16,9 +16,10 @@ from .config import FolderHomoConfig
 
 
 class HomoPatchScorer(nn.Module):
-    def __init__(self, embed_dim: int, *, num_heads: int = 8, dropout: float = 0.1, use_text_context: bool = False) -> None:
+    def __init__(self, embed_dim: int, *, num_heads: int = 8, dropout: float = 0.1, use_text_context: bool = False, use_contextualizer: bool = True) -> None:
         super().__init__()
         self.use_text_context = bool(use_text_context)
+        self.use_contextualizer = bool(use_contextualizer)
         self.attn = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.mlp = nn.Sequential(
@@ -43,11 +44,14 @@ class HomoPatchScorer(nn.Module):
         )
 
     def forward(self, tokens: torch.Tensor, text_context: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        x = tokens.unsqueeze(0)
-        attn_out, _ = self.attn(x, x, x, need_weights=False)
-        x = self.norm(x + attn_out)
-        x = x + self.mlp(x)
-        enhanced = x.squeeze(0)
+        if self.use_contextualizer:
+            x = tokens.unsqueeze(0)
+            attn_out, _ = self.attn(x, x, x, need_weights=False)
+            x = self.norm(x + attn_out)
+            x = x + self.mlp(x)
+            enhanced = x.squeeze(0)
+        else:
+            enhanced = tokens
         if self.use_text_context and self.text_proj is not None and text_context is not None and text_context.numel() > 0:
             enhanced = enhanced + self.text_proj(text_context.reshape(1, -1)).expand_as(enhanced)
         saliency = self.score_head(enhanced).squeeze(-1)
@@ -65,6 +69,7 @@ class HomoFolderBlock(nn.Module):
             num_heads=int(config.scorer_heads),
             dropout=float(config.scorer_dropout),
             use_text_context=bool(config.use_text_context),
+            use_contextualizer=bool(config.use_contextualizer),
         )
         self.folder_alpha = float(config.folder_alpha)
         self.novelty_weight = float(config.novelty_weight)
@@ -121,14 +126,15 @@ class HomoFolderBlock(nn.Module):
 
         return merge
 
-    def _folder_reduce(self, tokens: torch.Tensor, enhanced: torch.Tensor, protect: torch.Tensor) -> torch.Tensor:
+    def _folder_reduce(self, tokens: torch.Tensor, enhanced: torch.Tensor, protect: torch.Tensor, *, budget: Optional[int] = None) -> torch.Tensor:
         if tokens.ndim != 2:
             raise ValueError(f'HomoFolder expects rank-2 tokens, got {tuple(tokens.shape)}')
         x = tokens.unsqueeze(0)
         metric = enhanced.unsqueeze(0)
         protect = protect.unsqueeze(0)
         size = torch.ones_like(x[..., 0, None])
-        remaining = max(int(tokens.shape[0]) - int(self.budget), 0)
+        target_budget = int(self.budget if budget is None else budget)
+        remaining = max(int(tokens.shape[0]) - target_budget, 0)
         while remaining > 0 and x.shape[1] > 1:
             r_now = min(remaining, (x.shape[1] - 1) // 2)
             merge = self._folder_match(metric=metric, protect=protect, r=r_now, alpha=self.folder_alpha)
@@ -138,14 +144,15 @@ class HomoFolderBlock(nn.Module):
             metric = x / size.clamp_min(1e-12)
             protect = metric.norm(dim=-1)
             remaining -= r_now
-        if x.shape[1] > self.budget:
-            x = x[:, : self.budget, :]
-            size = size[:, : self.budget, :]
+        if x.shape[1] > target_budget:
+            x = x[:, :target_budget, :]
+            size = size[:, :target_budget, :]
         out = x * (1.0 + size.clamp_min(1e-12).log())
         return F.normalize(out.squeeze(0), dim=-1)
 
-    def forward(self, tokens: torch.Tensor, *, coarse_anchors: Optional[torch.Tensor] = None, text_context: Optional[torch.Tensor] = None, return_aux: bool = False):
-        if tokens.shape[0] == 0 or self.budget <= 0 or tokens.shape[0] <= self.budget:
+    def forward(self, tokens: torch.Tensor, *, coarse_anchors: Optional[torch.Tensor] = None, text_context: Optional[torch.Tensor] = None, return_aux: bool = False, budget_override: Optional[int] = None):
+        target_budget = int(self.budget if budget_override is None else budget_override)
+        if tokens.shape[0] == 0 or target_budget <= 0 or tokens.shape[0] <= target_budget:
             if return_aux:
                 aux = {
                     'source_tokens': tokens,
@@ -161,7 +168,7 @@ class HomoFolderBlock(nn.Module):
         continuous_importance = 0.5 * saliency_norm + 0.5 * novelty
         value_scale = 1.0 + self.gate_strength * gate.to(tokens.dtype) * continuous_importance
         gated_tokens = tokens * value_scale.unsqueeze(-1)
-        compressed = self._folder_reduce(tokens=gated_tokens, enhanced=enhanced, protect=protect)
+        compressed = self._folder_reduce(tokens=gated_tokens, enhanced=enhanced, protect=protect, budget=target_budget)
         if return_aux:
             aux = {
                 'source_tokens': tokens,
@@ -219,6 +226,7 @@ class HomoFolderCompressor(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, input_ids: torch.LongTensor, attention_mask: torch.Tensor, *, collect_marc_aux: bool = True) -> torch.Tensor:
         active_stages = set(self.config.active_stage_ids())
+        included_stages = set(self.config.included_stage_ids())
         # Query forward clears the cache in the parent model. Keep the first
         # document-side cache in a training step so hard-negative forwards do
         # not overwrite the positive document auxiliary targets.
@@ -244,10 +252,33 @@ class HomoFolderCompressor(nn.Module):
             text_context = text_tokens.mean(dim=0, keepdim=True) if self.config.use_text_context and text_tokens.numel() > 0 else None
             compressed: List[torch.Tensor] = []
             stage_aux: List[Dict[str, object]] = []
+            if self.config.normalized_organization_mode() == 'flat':
+                flat_tokens = torch.cat(stage_tokens, dim=0)
+                flat_out = self.blocks[0](
+                    flat_tokens,
+                    coarse_anchors=None,
+                    text_context=text_context,
+                    budget_override=int(sum(self.config.budgets)),
+                )
+                start = 0
+                for budget in self.config.budgets:
+                    end = min(start + int(budget), int(flat_out.shape[0]))
+                    compressed.append(flat_out[start:end])
+                    start = end
+                prefix_level = max(1, min(int(getattr(self.config, 'eval_prefix_level', 3)), len(compressed)))
+                sequence = torch.cat([text_tokens, *compressed[:prefix_level]], dim=0)
+                sequences.append(sequence)
+                debug_rows.append(tuple(int(x.shape[0]) for x in compressed[:prefix_level]))
+                if collect_marc:
+                    marc_rows.append({'text_len': int(text_tokens.shape[0]), 'stages': []})
+                continue
             coarse_anchors: Optional[torch.Tensor] = None
             running_image_offset = 0
             for stage_index, tokens in enumerate(stage_tokens):
-                if stage_index in active_stages:
+                if stage_index not in included_stages:
+                    out = tokens[:0]
+                    aux = None
+                elif stage_index in active_stages:
                     if collect_marc:
                         out, aux = self.blocks[stage_index](tokens, coarse_anchors=coarse_anchors, text_context=text_context, return_aux=True)
                     else:
@@ -268,7 +299,8 @@ class HomoFolderCompressor(nn.Module):
                         'doc_end': end,
                     })
                 running_image_offset += int(out.shape[0])
-                coarse_anchors = out if coarse_anchors is None else torch.cat([coarse_anchors, out], dim=0)
+                if stage_index in included_stages and out.numel() > 0:
+                    coarse_anchors = out if coarse_anchors is None else torch.cat([coarse_anchors, out], dim=0)
             prefix_level = max(1, min(int(getattr(self.config, 'eval_prefix_level', 3)), len(compressed)))
             sequence = torch.cat([text_tokens, *compressed[:prefix_level]], dim=0)
             sequences.append(sequence)

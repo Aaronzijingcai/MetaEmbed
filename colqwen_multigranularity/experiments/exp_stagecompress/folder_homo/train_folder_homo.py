@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -32,6 +34,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--folder-homo-detach-anchors', action='store_true', default=True)
     parser.add_argument('--folder-homo-no-detach-anchors', action='store_false', dest='folder_homo_detach_anchors')
     parser.add_argument('--folder-homo-use-text-context', action='store_true', default=False)
+    parser.add_argument('--folder-homo-no-contextualizer', action='store_false', dest='folder_homo_use_contextualizer', default=True)
+    parser.add_argument('--folder-homo-organization-mode', choices=['hierarchical', 'flat'], default='hierarchical')
+    parser.add_argument('--folder-homo-included-stages', type=str, default='all')
     parser.add_argument('--folder-homo-scorer-heads', type=int, default=8)
     parser.add_argument('--folder-homo-scorer-dropout', type=float, default=0.1)
     parser.add_argument('--folder-homo-debug-shapes', action='store_true', default=False)
@@ -60,7 +65,6 @@ def parse_args() -> argparse.Namespace:
             'bi_query_topk_sum',
             'bi_query_topk_adaptive',
             'bi_query_topk_sum_adaptive',
-            'bi_query_topk_hard_adaptive',
             'global_local',
             'factorized_local',
             'factorized_global',
@@ -71,10 +75,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--interaction-factorized-local-weight', type=float, default=1.0)
     parser.add_argument('--interaction-global-aux-weight', type=float, default=0.0)
     parser.add_argument('--interaction-query-topk', type=int, default=48)
-    parser.add_argument('--interaction-adaptive-ratio', type=float, default=1.5)
     parser.add_argument('--warm-start-adapter-path', type=str, default=None)
     parser.add_argument('--folder-homo-skip-save', action='store_true', default=False)
     parser.add_argument('--folder-homo-train-compressor-only', action='store_true', default=False)
+    parser.add_argument('--stop-after-step', type=int, default=0)
     homo_args, remaining = parser.parse_known_args()
 
     original_argv = sys.argv
@@ -100,6 +104,9 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         tau=float(args.folder_homo_tau),
         detach_anchors=bool(args.folder_homo_detach_anchors),
         use_text_context=bool(args.folder_homo_use_text_context),
+        use_contextualizer=bool(args.folder_homo_use_contextualizer),
+        organization_mode=str(args.folder_homo_organization_mode),
+        included_stages=str(args.folder_homo_included_stages),
         scorer_heads=int(args.folder_homo_scorer_heads),
         scorer_dropout=float(args.folder_homo_scorer_dropout),
         debug_shapes=bool(args.folder_homo_debug_shapes),
@@ -118,7 +125,6 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         interaction_factorized_local_weight=float(args.interaction_factorized_local_weight),
         interaction_global_aux_weight=float(args.interaction_global_aux_weight),
         interaction_query_topk=int(args.interaction_query_topk),
-        interaction_adaptive_ratio=float(args.interaction_adaptive_ratio),
     )
 
 
@@ -140,6 +146,33 @@ def main() -> None:
     args = parse_args()
     base_train._maybe_init_distributed()
     try:
+        for name in (
+            "MURE_DATASET_RESUME_SKIP_BATCHES",
+            "MURE_DATASET_RESUME_SKIP_ROWS_PER_RANK",
+            "MURE_PROBE_DATA_SKIP_ROWS_PER_RANK",
+        ):
+            os.environ.pop(name, None)
+        probe_data_start_step = int(os.environ.get("MURE_PROBE_DATA_START_STEP", "0"))
+        if probe_data_start_step < 0:
+            raise ValueError("MURE_PROBE_DATA_START_STEP must be non-negative")
+        if probe_data_start_step > 0:
+            os.environ["MURE_PROBE_DATA_SKIP_ROWS_PER_RANK"] = str(
+                probe_data_start_step * int(args.per_device_train_batch_size)
+            )
+        elif args.resume_from_checkpoint and not args.ignore_data_skip:
+            trainer_state_path = Path(args.resume_from_checkpoint) / "trainer_state.json"
+            if trainer_state_path.is_file():
+                resume_global_step = int(json.loads(trainer_state_path.read_text())["global_step"])
+                skip_batches = resume_global_step * int(args.gradient_accumulation_steps)
+                skip_rows_per_rank = skip_batches * int(args.per_device_train_batch_size)
+                os.environ["MURE_DATASET_RESUME_SKIP_BATCHES"] = str(skip_batches)
+                os.environ["MURE_DATASET_RESUME_SKIP_ROWS_PER_RANK"] = str(skip_rows_per_rank)
+                base_train.logger.info(
+                    "Configured dataset-level resume skip: global_step=%d batches=%d rows_per_rank=%d",
+                    resume_global_step,
+                    skip_batches,
+                    skip_rows_per_rank,
+                )
         granularities = normalize_granularities(args.granularities)
         level_weights = base_train._parse_level_weights(args.granularity_loss_weights, num_levels=len(granularities))
         folder_homo_config = build_config(args)
@@ -276,9 +309,36 @@ def main() -> None:
                 _save_folder_homo(Path(args.output_dir) / f'checkpoint-{state.global_step}')
                 return control
 
+        forced_save_steps = {
+            int(step)
+            for step in os.environ.get('MURE_FORCE_SAVE_STEPS', '').split(',')
+            if step.strip()
+        }
+
+        class _ForceSaveStepsCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                if state.global_step in forced_save_steps:
+                    control.should_save = True
+                return control
+
+        stop_after_step = int(args.stop_after_step)
+
+        class _StopAfterStepCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                if stop_after_step > 0 and state.global_step >= stop_after_step:
+                    control.should_save = True
+                    control.should_training_stop = True
+                return control
+
         training_app = ColModelTraining(config, Path(__file__))
         training_app.init_trainer()
         training_app.trainer.add_callback(_SaveFolderHomoCallback())
+        if forced_save_steps:
+            base_train.logger.info('Will force checkpoint saves at steps %s.', sorted(forced_save_steps))
+            training_app.trainer.add_callback(_ForceSaveStepsCallback())
+        if stop_after_step > 0:
+            base_train.logger.info('Will stop safely after global step %d.', stop_after_step)
+            training_app.trainer.add_callback(_StopAfterStepCallback())
         training_app.train()
         if not args.folder_homo_skip_save:
             training_app.save()

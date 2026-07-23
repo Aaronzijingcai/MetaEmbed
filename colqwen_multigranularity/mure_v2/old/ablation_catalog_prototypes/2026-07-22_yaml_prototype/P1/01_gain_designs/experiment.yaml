@@ -1,0 +1,24 @@
+defaults: ../../defaults/rhc_formal.yaml
+
+suite: gain_designs
+base:
+  priority: P1
+variants:
+  no_gain:
+    description: Remove cross-granularity gain.
+    environment:
+      NOVELTY_WEIGHT: 0.0
+      MAIN_PROCESS_PORT: 29900
+  one_minus_maxsim:
+    description: Final 1-MaxSim residual gain.
+    environment:
+      NOVELTY_WEIGHT: 1.0
+      MAIN_PROCESS_PORT: 29901
+  learned_metric_residual:
+    status: pending_protocol_alignment
+    backend: gain_exploration
+    description: Learned metric residual from the archived gain exploration.
+  learned_anchor_gate:
+    status: pending_protocol_alignment
+    backend: gain_exploration
+    description: Learned cross-anchor gate from the archived gain exploration.

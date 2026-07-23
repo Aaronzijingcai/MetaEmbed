@@ -1,0 +1,10 @@
+defaults: ../ablations/defaults/rhc_formal.yaml
+
+suite: main_model
+variants:
+  adaptive_bidirectional_topk48_mean:
+    priority: main
+    status: ready
+    description: Final MURE-V2 main model with RHC and adaptive bidirectional TopK-mean MaxSim.
+    environment:
+      MAIN_PROCESS_PORT: 29781

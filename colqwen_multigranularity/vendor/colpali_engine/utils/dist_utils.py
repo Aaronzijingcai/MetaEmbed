@@ -1,7 +1,33 @@
 # put all distributed training related code in this file
+import os
+from datetime import timedelta
+
 import torch
 import torch.distributed as dist
 from torch.distributed.nn.functional import all_gather
+
+
+_CPU_SYNC_GROUP = None
+
+
+def wait_for_all_ranks_cpu() -> None:
+    """Align ranks without launching a CUDA/NCCL barrier kernel."""
+    global _CPU_SYNC_GROUP
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        return
+    if _CPU_SYNC_GROUP is None:
+        timeout_seconds = int(os.environ.get("MURE_CPU_BARRIER_TIMEOUT", "600"))
+        _CPU_SYNC_GROUP = dist.new_group(
+            ranks=list(range(dist.get_world_size())),
+            backend="gloo",
+            timeout=timedelta(seconds=timeout_seconds),
+        )
+        if dist.get_rank() == 0:
+            print(
+                "[mure-ddp] staged backward uses a CPU barrier before NCCL gradient sync",
+                flush=True,
+            )
+    dist.barrier(group=_CPU_SYNC_GROUP)
 
 
 class GatherLayer(torch.autograd.Function):
@@ -72,8 +98,106 @@ def all_gather_with_grad_lavis(tensors):
 
 
 def gather_with_grad_torch(x: torch.Tensor) -> torch.Tensor:
-    tensor_all = all_gather(x)
-    return torch.cat(tensor_all, dim=0)
+    # Full differentiable gather preserves cross-rank document gradients.
+    # local_slice intentionally drops remote-loss gradient contributions and
+    # is retained only as an explicit diagnostic mode.
+    mode = os.environ.get("MURE_GATHER_WITH_GRAD_MODE", "torch").strip().lower()
+    if mode in {
+        "torch",
+        "torch_all_gather",
+        "full",
+        "torch_default_group",
+        "torch_legacy",
+    }:
+        tensor_all = all_gather(x)
+        return torch.cat(tensor_all, dim=0)
+    if mode in {"local_slice", "local"}:
+        tensor_all = GatherLayer.apply(x)
+        return torch.cat(tensor_all, dim=0)
+    raise ValueError(
+        f"Unknown MURE_GATHER_WITH_GRAD_MODE={mode!r}; expected "
+        "'torch' or 'local_slice'."
+    )
+
+
+def sync_gradients_after_backward(
+    model: torch.nn.Module,
+    *,
+    bucket_bytes: int = 64 * 1024 * 1024,
+) -> None:
+    """Average gradients after a DDP no_sync backward in deterministic buckets."""
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        return
+    if bucket_bytes <= 0:
+        raise ValueError("bucket_bytes must be positive")
+
+    parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    if not parameters:
+        return
+
+    device = parameters[0].device
+    if any(parameter.device != device for parameter in parameters):
+        raise RuntimeError("Deferred DDP gradient sync requires one parameter device per rank")
+
+    local_grad_flags = torch.tensor(
+        [parameter.grad is not None for parameter in parameters],
+        dtype=torch.int32,
+        device=device,
+    )
+    dist.all_reduce(local_grad_flags, op=dist.ReduceOp.SUM)
+    globally_used = local_grad_flags.ne(0).tolist()
+    world_size = dist.get_world_size()
+
+    bucket = []
+    bucket_numel = 0
+    bucket_dtype = None
+
+    def flush_bucket() -> None:
+        nonlocal bucket, bucket_numel, bucket_dtype
+        if not bucket:
+            return
+        flat = torch.cat(
+            [
+                (parameter.grad if parameter.grad is not None else torch.zeros_like(parameter))
+                .detach()
+                .reshape(-1)
+                for parameter in bucket
+            ]
+        )
+        if flat.is_sparse:
+            raise RuntimeError("Deferred DDP gradient sync does not support sparse gradients")
+        dist.all_reduce(flat, op=dist.ReduceOp.SUM)
+        flat.div_(world_size)
+
+        offset = 0
+        for parameter in bucket:
+            next_offset = offset + parameter.numel()
+            synced = flat[offset:next_offset].view_as(parameter)
+            if parameter.grad is None:
+                parameter.grad = synced.clone()
+            else:
+                parameter.grad.copy_(synced)
+            offset = next_offset
+        bucket = []
+        bucket_numel = 0
+        bucket_dtype = None
+
+    for parameter, is_used in zip(parameters, globally_used):
+        if not is_used:
+            continue
+        if parameter.grad is not None and parameter.grad.is_sparse:
+            raise RuntimeError("Deferred DDP gradient sync does not support sparse gradients")
+        parameter_bytes = parameter.numel() * parameter.element_size()
+        if bucket and (
+            parameter.dtype != bucket_dtype
+            or (bucket_numel * parameter.element_size()) + parameter_bytes > bucket_bytes
+        ):
+            flush_bucket()
+        if not bucket:
+            bucket_dtype = parameter.dtype
+        bucket.append(parameter)
+        bucket_numel += parameter.numel()
+    flush_bucket()
 
 
 def rank0_print(*args):

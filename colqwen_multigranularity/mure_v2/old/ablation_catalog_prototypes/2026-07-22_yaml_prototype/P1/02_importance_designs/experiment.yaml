@@ -1,0 +1,14 @@
+defaults: ../../defaults/rhc_formal.yaml
+
+suite: importance_designs
+base:
+  priority: P1
+  status: pending_protocol_alignment
+  backend: importance_exploration
+variants:
+  mlp_saliency:
+    description: MLP saliency used by the final RHC model.
+  mha_attention:
+    description: Received-attention importance from the archived importance exploration.
+  learned_gate:
+    description: Gate-head importance from the archived importance exploration.

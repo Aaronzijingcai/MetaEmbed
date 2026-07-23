@@ -25,7 +25,6 @@ BATCH_PASSAGE=${BATCH_PASSAGE:-16}
 BATCH_SCORE=${BATCH_SCORE:-64}
 NUM_WORKERS=${NUM_WORKERS:-0}
 TOPK=${TOPK:-48}
-ADAPTIVE_RATIO=${ADAPTIVE_RATIO:-1.5}
 MAIN_PROCESS_PORT_BASE=${MAIN_PROCESS_PORT_BASE:-29641}
 DRY_RUN=${DRY_RUN:-0}
 
@@ -82,7 +81,6 @@ run_one() {
       INTERACTION_LOSS_MODE="$train_mode" \
       INTERACTION_BI_LAMBDA="$bi_lambda" \
       INTERACTION_QUERY_TOPK="$TOPK" \
-      INTERACTION_ADAPTIVE_RATIO="$ADAPTIVE_RATIO" \
       INTERACTION_GLOBAL_WEIGHT=0.0 \
       INTERACTION_FACTORIZED_LOCAL_WEIGHT=1.0 \
       INTERACTION_GLOBAL_AUX_WEIGHT=0.0 \
@@ -120,11 +118,10 @@ fi
 echo "[next4] queue started at $(date +%Y-%m-%d\ %H:%M:%S)"
 echo "[next4] training from base model; RESUME_CKPT and WARM_START_ADAPTER_PATH are intentionally empty"
 echo "[next4] train data=$SUBSET_CONFIG"
-echo "[next4] topk=$TOPK adaptive_ratio=$ADAPTIVE_RATIO train_bsz=$TRAIN_BSZ interleaved_bsz=$INTERLEAVED_BSZ"
+echo "[next4] topk=$TOPK train_bsz=$TRAIN_BSZ interleaved_bsz=$INTERLEAVED_BSZ"
 
 run_one vidore_mmeb_bi_topk_sum48_lam09_s1k_from_base bi_query_topk_sum 0.9 bi_topk_sum48_lam09 "$MAIN_PROCESS_PORT_BASE"
 run_one vidore_mmeb_bi_topk_mean48_adaptive_s1k_from_base bi_query_topk_adaptive 0.8 bi_topk_mean48_adaptive_lam08 "$((MAIN_PROCESS_PORT_BASE + 1))"
 run_one vidore_mmeb_bi_topk_sum48_adaptive_s1k_from_base bi_query_topk_sum_adaptive 0.8 bi_topk_sum48_adaptive_lam08 "$((MAIN_PROCESS_PORT_BASE + 2))"
-run_one vidore_mmeb_bi_topk_mean48_hard_adaptive_s1k_from_base bi_query_topk_hard_adaptive 0.5 bi_topk_mean48_hard_adaptive "$((MAIN_PROCESS_PORT_BASE + 3))"
 
 echo "[next4] queue finished at $(date +%Y-%m-%d\ %H:%M:%S)"

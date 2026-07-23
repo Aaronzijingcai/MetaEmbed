@@ -10,10 +10,12 @@ import importlib.metadata
 import math, sys
 import os, shutil
 import time
+import types
 from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
+from torch.utils.checkpoint import checkpoint
 
 import transformers
 from packaging import version
@@ -81,6 +83,181 @@ def _is_peft_model(model):
             classes_to_check = (*classes_to_check, PeftMixedModel)
         return isinstance(model, classes_to_check)
     return False
+
+
+def _activate_gradient_checkpointing(self, args):
+    """Enable checkpointing without silently dropping PEFT gradients."""
+    trainable_parameters = [
+        (name, parameter)
+        for name, parameter in self.model.named_parameters()
+        if parameter.requires_grad
+    ]
+    trainable_groups = {
+        "language_lora": [
+            name
+            for name, _ in trainable_parameters
+            if ".language_model." in name and ".lora_" in name
+        ],
+        "visual_lora": [
+            name
+            for name, _ in trainable_parameters
+            if ".visual." in name and ".lora_" in name
+        ],
+        "custom_text_proj": [
+            name for name, _ in trainable_parameters if "custom_text_proj" in name
+        ],
+        "folder_homo": [
+            name for name, _ in trainable_parameters if "folder_homo" in name
+        ],
+    }
+    expected = {
+        "tensors": int(os.environ.get("MURE_EXPECTED_TRAINABLE_TENSORS", "0")),
+        "numel": int(os.environ.get("MURE_EXPECTED_TRAINABLE_NUMEL", "0")),
+        "language_lora": int(
+            os.environ.get("MURE_EXPECTED_LANGUAGE_LORA_TENSORS", "0")
+        ),
+        "visual_lora": int(
+            os.environ.get("MURE_EXPECTED_VISUAL_LORA_TENSORS", "0")
+        ),
+        "custom_text_proj": int(
+            os.environ.get("MURE_EXPECTED_CUSTOM_TEXT_PROJ_TENSORS", "0")
+        ),
+        "folder_homo": int(
+            os.environ.get("MURE_EXPECTED_FOLDER_HOMO_TENSORS", "0")
+        ),
+    }
+    actual_tensors = len(trainable_parameters)
+    actual_numel = sum(parameter.numel() for _, parameter in trainable_parameters)
+    if expected["tensors"] > 0 and actual_tensors != expected["tensors"]:
+        raise RuntimeError(
+            f"Trainable tensor count mismatch: expected={expected['tensors']}, actual={actual_tensors}"
+        )
+    if expected["numel"] > 0 and actual_numel != expected["numel"]:
+        raise RuntimeError(
+            f"Trainable parameter count mismatch: expected={expected['numel']}, actual={actual_numel}"
+        )
+    for group_name, names in trainable_groups.items():
+        expected_count = expected[group_name]
+        if expected_count > 0 and len(names) != expected_count:
+            raise RuntimeError(
+                f"Trainable {group_name} tensor count mismatch: "
+                f"expected={expected_count}, actual={len(names)}"
+            )
+    if dist.is_available() and dist.is_initialized() and dist.get_rank() == 0:
+        logger.info(
+            "Verified trainable set: tensors=%d numel=%d language_lora=%d "
+            "visual_lora=%d custom_text_proj=%d folder_homo=%d",
+            actual_tensors,
+            actual_numel,
+            len(trainable_groups["language_lora"]),
+            len(trainable_groups["visual_lora"]),
+            len(trainable_groups["custom_text_proj"]),
+            len(trainable_groups["folder_homo"]),
+        )
+
+    if not args.gradient_checkpointing:
+        return
+
+    checkpoint_kwargs = args.gradient_checkpointing_kwargs
+    self.model.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs=checkpoint_kwargs
+    )
+
+    use_reentrant = True
+    if checkpoint_kwargs is not None:
+        use_reentrant = checkpoint_kwargs.get("use_reentrant", True)
+    if not use_reentrant or not _is_peft_model(self.model):
+        return
+    if getattr(self.model, "_mure_input_require_grads_enabled", False):
+        return
+
+    base_model = self.model.get_base_model()
+    checkpoint_model = next(
+        (
+            module
+            for module in base_model.modules()
+            if isinstance(module, PreTrainedModel)
+            and hasattr(module, "enable_input_require_grads")
+        ),
+        None,
+    )
+    if checkpoint_model is None:
+        raise RuntimeError(
+            "Reentrant gradient checkpointing with PEFT requires "
+            "a PreTrainedModel with enable_input_require_grads()"
+        )
+    checkpoint_model.enable_input_require_grads()
+
+    # ColQwen's custom inner_forward calls the cached `_embed_tokens` module
+    # directly, and its vision tower starts from a frozen patch projection.
+    # Hook both exact boundaries so checkpointed language and vision LoRA paths
+    # receive gradients through their frozen inputs.
+    def require_output_grad(_module, _inputs, output):
+        if not torch.is_tensor(output):
+            raise RuntimeError(
+                "Checkpoint input module must return a tensor, got "
+                f"{type(output).__name__}"
+            )
+        output.requires_grad_(True)
+
+    token_embedding = getattr(checkpoint_model, "_embed_tokens", None)
+    if token_embedding is None:
+        raise RuntimeError(
+            "Could not locate ColQwen's cached token embedding module for PEFT"
+        )
+    visual = getattr(checkpoint_model, "visual", None)
+    visual_patch_embedding = getattr(visual, "patch_embed", None)
+    if visual_patch_embedding is None:
+        raise RuntimeError(
+            "Could not locate ColQwen's visual patch embedding module for PEFT"
+        )
+    self.model._mure_input_require_grads_hooks = [
+        token_embedding.register_forward_hook(require_output_grad),
+        visual_patch_embedding.register_forward_hook(require_output_grad),
+    ]
+
+    vision_blocks = getattr(visual, "blocks", None)
+    if vision_blocks is None or len(vision_blocks) == 0:
+        raise RuntimeError("Could not locate ColQwen vision blocks for checkpointing")
+    checkpointed_vision_blocks = 0
+    for block in vision_blocks:
+        if getattr(block, "_mure_reentrant_checkpoint_enabled", False):
+            continue
+        original_forward = block.forward
+
+        def checkpointed_forward(
+            module,
+            hidden_states,
+            *block_args,
+            _original_forward=original_forward,
+            **block_kwargs,
+        ):
+            if not module.training or not torch.is_grad_enabled():
+                return _original_forward(hidden_states, *block_args, **block_kwargs)
+
+            def run_block(checkpoint_hidden_states):
+                return _original_forward(
+                    checkpoint_hidden_states, *block_args, **block_kwargs
+                )
+
+            return checkpoint(
+                run_block,
+                hidden_states,
+                use_reentrant=True,
+                preserve_rng_state=True,
+            )
+
+        block.forward = types.MethodType(checkpointed_forward, block)
+        block._mure_reentrant_checkpoint_enabled = True
+        checkpointed_vision_blocks += 1
+
+    self.model._mure_input_require_grads_enabled = True
+    logger.info(
+        "Enabled PEFT reentrant checkpointing on %s (%d direct input hooks, %d vision blocks)",
+        checkpoint_model.__class__.__name__,
+        2,
+        checkpointed_vision_blocks,
+    )
 
 
 def _inner_training_loop(
@@ -197,11 +374,8 @@ def _inner_training_loop(
     # Compute absolute values for logging, eval, and save if given as ratio
     self.state.compute_steps(args, max_steps)
 
-    # Activate gradient checkpointing if needed
-    if args.gradient_checkpointing:
-        self.model.gradient_checkpointing_enable(
-            gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs
-        )
+    # Activate gradient checkpointing if needed.
+    _activate_gradient_checkpointing(self, args)
 
     model = self._wrap_model(self.model_wrapped)
 
@@ -298,6 +472,8 @@ def _inner_training_loop(
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
     steps_trained_progress_bar = None
+    dataset_level_skip_batches = 0
+    probe_data_start_step = int(os.environ.get("MURE_PROBE_DATA_START_STEP", "0"))
 
     # Check if continuing training from a checkpoint
     # FIX 1: correct behaviors for resuming from IterableDataset
@@ -309,7 +485,14 @@ def _inner_training_loop(
         )
         self.compare_trainer_and_checkpoint_args(self.args, self.state)
         self._load_callback_state()
-        if num_update_steps_per_epoch is not None:
+        if probe_data_start_step > 0:
+            epochs_trained = 0
+            steps_trained_in_current_epoch = 0
+            logger.info(
+                "  Probe dataset is pre-positioned at data step %s; disabling Trainer resume data skip",
+                probe_data_start_step,
+            )
+        elif num_update_steps_per_epoch is not None:
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (
@@ -338,6 +521,24 @@ def _inner_training_loop(
         if num_update_steps_per_epoch is not None:
             logger.info(f"  Continuing training from epoch {epochs_trained}")
         logger.info(f"  Continuing training from global step {self.state.global_step}")
+        dataset_level_skip_batches = int(
+            getattr(self, "_mure_dataset_level_resume_skip_batches", 0)
+        )
+        if dataset_level_skip_batches > 0:
+            expected_skip_batches = (
+                int(self.state.global_step) * int(args.gradient_accumulation_steps)
+            )
+            if dataset_level_skip_batches != expected_skip_batches:
+                raise RuntimeError(
+                    "Dataset-level resume skip mismatch: "
+                    f"got {dataset_level_skip_batches} batches, expected {expected_skip_batches}."
+                )
+            steps_trained_in_current_epoch = 0
+            logger.info(
+                "  Dataset-level fast resume already skipped %d batches before collation; "
+                "Trainer will not replay them.",
+                dataset_level_skip_batches,
+            )
         if not args.ignore_data_skip:
             logger.info(
                 f"  Will skip the first {epochs_trained} epochs then the first"
@@ -370,7 +571,9 @@ def _inner_training_loop(
         if hasattr(epoch_dataloader, "set_epoch"):
             epoch_dataloader.set_epoch(epoch)
         # FIX 2: correct behaviors for resuming from IterableDataset
-        steps_skipped = 0
+        steps_skipped = (
+            dataset_level_skip_batches if epoch == epochs_trained else 0
+        )
         rng_to_sync = False
         epoch_iterator = None
         if steps_trained_in_current_epoch > 0 and num_update_steps_per_epoch is None:
@@ -414,7 +617,13 @@ def _inner_training_loop(
             and resume_from_checkpoint is not None
             and steps_trained_in_current_epoch == 0
         ):
-            self._load_rng_state(resume_from_checkpoint)
+            if dataset_level_skip_batches > 0:
+                # Creating a DataLoader iterator consumes torch RNG. Restore the
+                # checkpoint RNG after iterator creation and before fetching the
+                # first resumed batch so stochastic collators also stay aligned.
+                rng_to_sync = True
+            else:
+                self._load_rng_state(resume_from_checkpoint)
 
         # rng_to_sync = False
         # steps_skipped = 0
@@ -430,6 +639,9 @@ def _inner_training_loop(
         # epoch_iterator = iter(epoch_dataloader)
         if epoch_iterator is None:
             epoch_iterator = iter(epoch_dataloader)
+        if dataset_level_skip_batches > 0 and rng_to_sync:
+            self._load_rng_state(resume_from_checkpoint)
+            rng_to_sync = False
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = num_examples % args.gradient_accumulation_steps
         if remainder == 0:
@@ -898,11 +1110,8 @@ def _inner_training_loop_4_55_0(
     # Compute absolute values for logging, eval, and save if given as ratio
     self.state.compute_steps(args, max_steps)
 
-    # Activate gradient checkpointing if needed
-    if args.gradient_checkpointing:
-        self.model.gradient_checkpointing_enable(
-            gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs
-        )
+    # Activate gradient checkpointing if needed.
+    _activate_gradient_checkpointing(self, args)
 
     model = self._wrap_model(self.model_wrapped)
 
@@ -1003,6 +1212,8 @@ def _inner_training_loop_4_55_0(
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
     steps_trained_progress_bar = None
+    dataset_level_skip_batches = 0
+    probe_data_start_step = int(os.environ.get("MURE_PROBE_DATA_START_STEP", "0"))
 
     # Check if continuing training from a checkpoint
     if resume_from_checkpoint is not None and os.path.isfile(
@@ -1021,7 +1232,14 @@ def _inner_training_loop_4_55_0(
         #     steps_trained_in_current_epoch *= args.gradient_accumulation_steps
         # else:
         #     steps_trained_in_current_epoch = 0
-        if num_update_steps_per_epoch is not None:
+        if probe_data_start_step > 0:
+            epochs_trained = 0
+            steps_trained_in_current_epoch = 0
+            logger.info(
+                "  Probe dataset is pre-positioned at data step %s; disabling Trainer resume data skip",
+                probe_data_start_step,
+            )
+        elif num_update_steps_per_epoch is not None:
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
             if not args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (
@@ -1051,6 +1269,24 @@ def _inner_training_loop_4_55_0(
             logger.info(f"  Continuing training from epoch {epochs_trained}")
         # logger.info(f"  Continuing training from epoch {epochs_trained}")
         logger.info(f"  Continuing training from global step {self.state.global_step}")
+        dataset_level_skip_batches = int(
+            getattr(self, "_mure_dataset_level_resume_skip_batches", 0)
+        )
+        if dataset_level_skip_batches > 0:
+            expected_skip_batches = (
+                int(self.state.global_step) * int(args.gradient_accumulation_steps)
+            )
+            if dataset_level_skip_batches != expected_skip_batches:
+                raise RuntimeError(
+                    "Dataset-level resume skip mismatch: "
+                    f"got {dataset_level_skip_batches} batches, expected {expected_skip_batches}."
+                )
+            steps_trained_in_current_epoch = 0
+            logger.info(
+                "  Dataset-level fast resume already skipped %d batches before collation; "
+                "Trainer will not replay them.",
+                dataset_level_skip_batches,
+            )
         if not args.ignore_data_skip:
             logger.info(
                 f"  Will skip the first {epochs_trained} epochs then the first"
@@ -1082,7 +1318,9 @@ def _inner_training_loop_4_55_0(
         if hasattr(epoch_dataloader, "set_epoch"):
             epoch_dataloader.set_epoch(epoch)
 
-        steps_skipped = 0
+        steps_skipped = (
+            dataset_level_skip_batches if epoch == epochs_trained else 0
+        )
         rng_to_sync = False
         epoch_iterator = None
         if steps_trained_in_current_epoch > 0 and num_update_steps_per_epoch is None:
@@ -1126,7 +1364,13 @@ def _inner_training_loop_4_55_0(
             and resume_from_checkpoint is not None
             and steps_trained_in_current_epoch == 0
         ):
-            self._load_rng_state(resume_from_checkpoint)
+            if dataset_level_skip_batches > 0:
+                # Creating a DataLoader iterator consumes torch RNG. Restore the
+                # checkpoint RNG after iterator creation and before fetching the
+                # first resumed batch so stochastic collators also stay aligned.
+                rng_to_sync = True
+            else:
+                self._load_rng_state(resume_from_checkpoint)
 
         # rng_to_sync = False
         # steps_skipped = 0
@@ -1142,6 +1386,9 @@ def _inner_training_loop_4_55_0(
         # epoch_iterator = iter(epoch_dataloader)
         if epoch_iterator is None:
             epoch_iterator = iter(epoch_dataloader)
+        if dataset_level_skip_batches > 0 and rng_to_sync:
+            self._load_rng_state(resume_from_checkpoint)
+            rng_to_sync = False
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % args.gradient_accumulation_steps
         if remainder == 0:

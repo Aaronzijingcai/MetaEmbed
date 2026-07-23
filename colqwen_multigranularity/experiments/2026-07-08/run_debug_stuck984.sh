@@ -25,15 +25,23 @@ export DATA_DIR=${DATA_DIR:-$PROJECT_DIR/data_dir/}
 export DATASET_NUM_PROC=${DATASET_NUM_PROC:-1}
 export DATASET_SHUFFLE_BUFFER=${DATASET_SHUFFLE_BUFFER:-1024}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 NUM_PROCS=${NUM_PROCS:-8}
 MASTER_PORT=${MASTER_PORT:-29984}
 START_STEP=${START_STEP:-970}
 END_STEP=${END_STEP:-990}
-TRAIN_BSZ=${TRAIN_BSZ:-10}
-INTERLEAVED_BSZ=${INTERLEAVED_BSZ:-10}
+TRAIN_BSZ=${TRAIN_BSZ:-8}
+INTERLEAVED_BSZ=${INTERLEAVED_BSZ:-8}
 NUM_SHARDS=${NUM_SHARDS:-128}
 COLLATE=${COLLATE:-0}
+MODEL_REPLAY=${MODEL_REPLAY:-0}
+BACKWARD=${BACKWARD:-0}
+DDP_WRAP=${DDP_WRAP:-0}
+DDP_FIND_UNUSED_PARAMETERS=${DDP_FIND_UNUSED_PARAMETERS:-1}
+INTERACTION_LOSS_MODE=${INTERACTION_LOSS_MODE:-q2d_query_topk}
+INTERACTION_BI_LAMBDA=${INTERACTION_BI_LAMBDA:-0.5}
+INTERACTION_QUERY_TOPK=${INTERACTION_QUERY_TOPK:-48}
 OUTPUT_DIR=${OUTPUT_DIR:-$SCRIPT_DIR/runs/debug_stuck984_$(date +%Y%m%d_%H%M%S)}
 
 mkdir -p "$OUTPUT_DIR" "$HF_DATASETS_CACHE" "$HUGGINGFACE_HUB_CACHE" "$TMPDIR"
@@ -50,17 +58,33 @@ args=(
   --num-shards "$NUM_SHARDS"
   --dataset-num-proc "$DATASET_NUM_PROC"
   --dataset-shuffle-buffer "$DATASET_SHUFFLE_BUFFER"
+  --model-name-or-path "$PROJECT_DIR/models/colqwen2.5-base"
+  --interaction-loss-mode "$INTERACTION_LOSS_MODE"
+  --interaction-bi-lambda "$INTERACTION_BI_LAMBDA"
+  --interaction-query-topk "$INTERACTION_QUERY_TOPK"
 )
 
 if [[ "$COLLATE" == "1" || "$COLLATE" == "true" || "$COLLATE" == "TRUE" ]]; then
   args+=(--collate)
+fi
+if [[ "$MODEL_REPLAY" == "1" || "$MODEL_REPLAY" == "true" || "$MODEL_REPLAY" == "TRUE" ]]; then
+  args+=(--model-replay)
+fi
+if [[ "$BACKWARD" == "1" || "$BACKWARD" == "true" || "$BACKWARD" == "TRUE" ]]; then
+  args+=(--backward)
+fi
+if [[ "$DDP_WRAP" == "1" || "$DDP_WRAP" == "true" || "$DDP_WRAP" == "TRUE" ]]; then
+  args+=(--ddp-wrap)
+fi
+if [[ "$DDP_FIND_UNUSED_PARAMETERS" == "1" || "$DDP_FIND_UNUSED_PARAMETERS" == "true" || "$DDP_FIND_UNUSED_PARAMETERS" == "TRUE" ]]; then
+  args+=(--ddp-find-unused-parameters)
 fi
 
 {
   echo "[debug-stuck984] start $(date +%Y-%m-%d\ %H:%M:%S)"
   echo "[debug-stuck984] output=$OUTPUT_DIR"
   echo "[debug-stuck984] cache=$MURE_CACHE_ROOT hf_datasets=$HF_DATASETS_CACHE tmp=$TMPDIR"
-  echo "[debug-stuck984] steps=$START_STEP-$END_STEP train_bsz=$TRAIN_BSZ interleaved_bsz=$INTERLEAVED_BSZ num_procs=$NUM_PROCS collate=$COLLATE"
+  echo "[debug-stuck984] steps=$START_STEP-$END_STEP train_bsz=$TRAIN_BSZ interleaved_bsz=$INTERLEAVED_BSZ num_procs=$NUM_PROCS collate=$COLLATE model_replay=$MODEL_REPLAY backward=$BACKWARD ddp_wrap=$DDP_WRAP ddp_find_unused=$DDP_FIND_UNUSED_PARAMETERS interaction=$INTERACTION_LOSS_MODE topk=$INTERACTION_QUERY_TOPK"
 } | tee "$OUTPUT_DIR/launch.log"
 
 python -m torch.distributed.run \

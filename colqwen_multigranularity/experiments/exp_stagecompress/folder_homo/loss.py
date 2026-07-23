@@ -45,7 +45,6 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
         self.interaction_factorized_local_weight = float(getattr(folder_homo_config, 'interaction_factorized_local_weight', 1.0))
         self.interaction_global_aux_weight = float(getattr(folder_homo_config, 'interaction_global_aux_weight', 0.0))
         self.interaction_query_topk = int(getattr(folder_homo_config, 'interaction_query_topk', 48))
-        self.interaction_adaptive_ratio = float(getattr(folder_homo_config, 'interaction_adaptive_ratio', 1.5))
         self._timing_forward_count = 0
 
     def _timing_enabled(self) -> bool:
@@ -151,7 +150,11 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
         if diagonal and doc_bsz != bsz:
             raise ValueError(f"Diagonal topK score expects matching batch sizes, got {bsz} and {doc_bsz}")
 
-        neg_inf = torch.finfo(query_embeddings.dtype).min
+        # Use a finite sentinel: autocast can make the einsum result bf16 even
+        # when the input embedding tensor is fp32, and filling bf16 tensors with
+        # fp32 finfo.min overflows. Similarities are normalized, so -1e4 is
+        # safely below any valid score while remaining representable in fp32/bf16.
+        neg_inf = -1e4
         doc_chunk_size = max(int(self.doc_chunk_size), 1)
         query_chunk_size = max(int(self.query_chunk_size), 1) if self.query_chunk_size else nq
         if diagonal:
@@ -305,26 +308,6 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
             row_lambda = q2d.new_tensor(min(max(float(self.interaction_bi_lambda), 0.0), 1.0))
         return row_lambda * q2d + (1.0 - row_lambda) * d2q
 
-    def _combine_hard_adaptive_bi_scores(
-        self,
-        *,
-        q2d: torch.Tensor,
-        d2q: torch.Tensor,
-        query_mask: torch.Tensor,
-        doc_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        ratio = max(float(self.interaction_adaptive_ratio), 1.0)
-        query_len = query_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
-        doc_len = doc_mask.to(dtype=torch.float32).sum(dim=1).clamp_min(1.0)
-        if q2d.ndim == 2:
-            use_q2d = doc_len.unsqueeze(0) >= query_len.unsqueeze(1) * ratio
-            use_d2q = query_len.unsqueeze(1) >= doc_len.unsqueeze(0) * ratio
-        else:
-            use_q2d = doc_len >= query_len * ratio
-            use_d2q = query_len >= doc_len * ratio
-        bi = 0.5 * (q2d + d2q)
-        return torch.where(use_q2d.to(device=q2d.device), q2d, torch.where(use_d2q.to(device=q2d.device), d2q, bi))
-
     def _aggregate_masked_scores_with_normalization(
         self,
         *,
@@ -395,7 +378,7 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
             )
             stats['query_topk'] = query_embeddings.new_tensor(float(topk))
             return topk_scores, stats, None
-        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive', 'bi_query_topk_hard_adaptive'}:
+        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive'}:
             topk = max(int(self.interaction_query_topk), 1)
             reduce = 'sum' if mode in {'bi_query_topk_sum', 'bi_query_topk_sum_adaptive'} else 'mean'
             q2d = self._aggregate_query_topk_scores(
@@ -418,14 +401,6 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
             ).transpose(0, 1)
             stats['query_topk'] = query_embeddings.new_tensor(float(topk))
             stats['interaction_bi_lambda'] = query_embeddings.new_tensor(float(self.interaction_bi_lambda))
-            if mode == 'bi_query_topk_hard_adaptive':
-                stats['interaction_adaptive_ratio'] = query_embeddings.new_tensor(float(self.interaction_adaptive_ratio))
-                return self._combine_hard_adaptive_bi_scores(
-                    q2d=q2d,
-                    d2q=d2q,
-                    query_mask=query_mask,
-                    doc_mask=doc_mask,
-                ), stats, None
             return self._combine_bi_scores(
                 q2d=q2d,
                 d2q=d2q,
@@ -513,7 +488,7 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
                 reduce='sum' if mode == 'q2d_query_topk_sum' else 'mean',
                 diagonal=True,
             )
-        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive', 'bi_query_topk_hard_adaptive'}:
+        if mode in {'bi_query_topk', 'bi_query_topk_sum', 'bi_query_topk_adaptive', 'bi_query_topk_sum_adaptive'}:
             topk = max(int(self.interaction_query_topk), 1)
             reduce = 'sum' if mode in {'bi_query_topk_sum', 'bi_query_topk_sum_adaptive'} else 'mean'
             q2d = self._aggregate_query_topk_scores(
@@ -534,13 +509,6 @@ class FolderHomoMRLInBatchNegativeLoss(StageCompressMRLInBatchNegativeLoss):
                 reduce=reduce,
                 diagonal=True,
             )
-            if mode == 'bi_query_topk_hard_adaptive':
-                return self._combine_hard_adaptive_bi_scores(
-                    q2d=q2d,
-                    d2q=d2q,
-                    query_mask=query_mask,
-                    doc_mask=doc_mask,
-                )
             return self._combine_bi_scores(
                 q2d=q2d,
                 d2q=d2q,

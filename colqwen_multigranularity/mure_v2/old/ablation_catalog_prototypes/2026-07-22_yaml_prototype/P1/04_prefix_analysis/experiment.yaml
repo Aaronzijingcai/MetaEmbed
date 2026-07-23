@@ -1,0 +1,18 @@
+suite: prefix_analysis
+base:
+  priority: P1
+  status: eval_only
+  backend: prefix_evaluation
+variants:
+  mrl_e1:
+    description: First prefix from the MRL-trained model.
+  mrl_e2:
+    description: Second prefix from the MRL-trained model.
+  mrl_e3:
+    description: Complete prefix from the MRL-trained model.
+  no_mrl_e1:
+    description: First prefix from the final-prefix-only model.
+  no_mrl_e2:
+    description: Second prefix from the final-prefix-only model.
+  no_mrl_e3:
+    description: Complete prefix from the final-prefix-only model.

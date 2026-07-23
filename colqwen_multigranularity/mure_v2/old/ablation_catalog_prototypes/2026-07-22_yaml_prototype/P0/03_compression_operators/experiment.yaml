@@ -1,0 +1,30 @@
+defaults: ../../defaults/rhc_formal.yaml
+
+suite: compression_operators
+base:
+  status: pending_protocol_alignment
+variants:
+  full_token_mrl:
+    backend: mrl_main
+    description: Uncompressed MRL reference under the complete data and training protocol.
+  visionzip:
+    backend: stagecompress
+    description: Post-projection VisionZip at the matched 384-token budget.
+  folder:
+    backend: stagecompress
+    description: Post-projection FOLDER at the matched 384-token budget.
+  scope:
+    backend: stagecompress
+    description: Post-projection SCOPE at the matched 384-token budget.
+  stage_resampler:
+    backend: stagecompress
+    description: Learnable stage resampler at the matched 384-token budget.
+  light_colpali:
+    backend: external_baseline
+    description: Light-ColPali-style post-MLLM clustering at the matched 384-token budget.
+  rhc:
+    status: ready
+    backend: rhc
+    description: RHC reference at the matched 384-token budget.
+    environment:
+      MAIN_PROCESS_PORT: 29820

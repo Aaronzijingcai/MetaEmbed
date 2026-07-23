@@ -16,7 +16,7 @@ from colqwen_multigranularity import train as base_train
 from colqwen_multigranularity.core import normalize_granularities
 
 from .compression import StageCompressConfig, canonicalize_stagecompress_method
-from .loss import StageCompressMRLInBatchNegativeLoss
+from colqwen_multigranularity.experiments.exp_stagecompress.folder_homo.loss import FolderHomoMRLInBatchNegativeLoss
 from .modeling_stagecompress import build_stagecompress_model
 
 
@@ -29,13 +29,19 @@ def parse_args() -> argparse.Namespace:
         '--stagecompress-method',
         type=str,
         default='strategy1_softassign',
-        choices=['strategy1_softassign', 'strategy3_prumerge', 'strategy4_visionzip', 'strategy5_folder', 'strategy6_scope', 'strategy7_stage_resampler'],
+        choices=['strategy1_softassign', 'strategy3_prumerge', 'strategy4_visionzip', 'strategy5_folder', 'strategy6_scope', 'strategy7_stage_resampler', 'strategy8_light_colpali'],
     )
     parser.add_argument('--stagecompress-tau', type=float, default=1.0)
     parser.add_argument('--stagecompress-use-text-context', action='store_true', default=False)
     parser.add_argument('--stagecompress-scorer-heads', type=int, default=8)
     parser.add_argument('--stagecompress-scorer-dropout', type=float, default=0.1)
     parser.add_argument('--stagecompress-debug-shapes', action='store_true', default=False)
+    parser.add_argument('--interaction-loss-mode', type=str, default='flat')
+    parser.add_argument('--interaction-bi-lambda', type=float, default=0.5)
+    parser.add_argument('--interaction-global-weight', type=float, default=0.0)
+    parser.add_argument('--interaction-factorized-local-weight', type=float, default=1.0)
+    parser.add_argument('--interaction-global-aux-weight', type=float, default=0.0)
+    parser.add_argument('--interaction-query-topk', type=int, default=48)
     parser.add_argument('--stagecompress-skip-save', action='store_true', default=False)
     sc_args, remaining = parser.parse_known_args()
 
@@ -62,6 +68,12 @@ def build_config(args: argparse.Namespace) -> StageCompressConfig:
         scorer_heads=int(args.stagecompress_scorer_heads),
         scorer_dropout=float(args.stagecompress_scorer_dropout),
         debug_shapes=bool(args.stagecompress_debug_shapes),
+        interaction_loss_mode=str(args.interaction_loss_mode),
+        interaction_bi_lambda=float(args.interaction_bi_lambda),
+        interaction_global_weight=float(args.interaction_global_weight),
+        interaction_factorized_local_weight=float(args.interaction_factorized_local_weight),
+        interaction_global_aux_weight=float(args.interaction_global_aux_weight),
+        interaction_query_topk=int(args.interaction_query_topk),
     )
 
 
@@ -123,9 +135,9 @@ def main() -> None:
             if Path(args.eval_mmeb_config).exists():
                 eval_dataset_loader_mmeb = configue.load(args.eval_mmeb_config)
 
-        loss_func = StageCompressMRLInBatchNegativeLoss(
+        loss_func = FolderHomoMRLInBatchNegativeLoss(
             image_token_id=processor.image_token_id,
-            compress_config=compress_config,
+            folder_homo_config=compress_config,
             temperature=args.temperature,
             granularities=granularities,
             level_weights=level_weights,

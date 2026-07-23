@@ -12,10 +12,16 @@ SCORERS=${SCORERS:?SCORERS is required}
 
 CUDA_DEVICE_LIST=${CUDA_DEVICE_LIST:-0,1,2,3,4,5,6,7}
 NUM_GPUS=${NUM_GPUS:-8}
+BUDGETS=(${BUDGETS:-128 128 128})
 BATCH_QUERY=${BATCH_QUERY:-32}
 BATCH_PASSAGE=${BATCH_PASSAGE:-32}
 BATCH_SCORE=${BATCH_SCORE:-128}
 NUM_WORKERS=${NUM_WORKERS:-0}
+
+if [[ "${#BUDGETS[@]}" -ne 3 ]]; then
+  echo "BUDGETS must contain exactly 3 integers, got: ${BUDGETS[*]}" >&2
+  exit 2
+fi
 
 RUN_DIR="$SCRIPT_DIR/runs/$RUN_NAME"
 OUT_DIR=${OUT_DIR:-$RUN_DIR/eval/maxsim_vidorev2_worst10_$(basename "$CHECKPOINT")}
@@ -38,6 +44,7 @@ env \
   OUT_DIR="$OUT_DIR" \
   LOG_DIR="$LOG_DIR" \
   SCORERS="$SCORERS" \
+  BUDGETS="${BUDGETS[*]}" \
   RUN_MMEB=1 \
   RUN_VIDORE=1 \
   CUDA_DEVICE_LIST="$CUDA_DEVICE_LIST" \
@@ -47,4 +54,3 @@ env \
   BATCH_SCORE="$BATCH_SCORE" \
   NUM_WORKERS="$NUM_WORKERS" \
   "$EVAL_SH"
-

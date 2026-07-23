@@ -469,13 +469,19 @@ def main() -> None:
         "overall/nonduplicate_margin_component",
     ]:
         val = summary.get(key, {})
-        lines.append(f"| {key} | {val.get("mean", 0.0):.4f} | {val.get("median", 0.0):.4f} | {val.get("n", 0.0):.0f} |")
+        lines.append(
+            f"| {key} | {val.get('mean', 0.0):.4f} | "
+            f"{val.get('median', 0.0):.4f} | {val.get('n', 0.0):.0f} |"
+        )
     lines.extend(["", "## Dataset Breakdown", "", "| Signal | Mean | Median | N |", "|---|---:|---:|---:|"])
     for key in sorted(k for k in summary if "/" in k and not k.startswith("overall/")):
         val = summary[key]
         if not isinstance(val, dict) or "mean" not in val:
             continue
-        lines.append(f"| {key} | {val.get("mean", 0.0):.4f} | {val.get("median", 0.0):.4f} | {val.get("n", 0.0):.0f} |")
+        lines.append(
+            f"| {key} | {val.get('mean', 0.0):.4f} | "
+            f"{val.get('median', 0.0):.4f} | {val.get('n', 0.0):.0f} |"
+        )
     lines.extend([
         "",
         "## Reading Guide",

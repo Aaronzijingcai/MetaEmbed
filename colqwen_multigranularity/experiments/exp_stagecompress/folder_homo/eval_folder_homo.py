@@ -45,6 +45,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--folder-homo-detach-anchors', action='store_true', default=True)
     parser.add_argument('--folder-homo-no-detach-anchors', action='store_false', dest='folder_homo_detach_anchors')
     parser.add_argument('--folder-homo-use-text-context', action='store_true', default=False)
+    parser.add_argument('--folder-homo-no-contextualizer', action='store_false', dest='folder_homo_use_contextualizer', default=True)
+    parser.add_argument('--folder-homo-organization-mode', choices=['hierarchical', 'flat'], default='hierarchical')
+    parser.add_argument('--folder-homo-included-stages', type=str, default='all')
     parser.add_argument('--folder-homo-scorer-heads', type=int, default=8)
     parser.add_argument('--folder-homo-scorer-dropout', type=float, default=0.1)
     parser.add_argument('--folder-homo-debug-shapes', action='store_true', default=False)
@@ -77,6 +80,9 @@ def build_config(args: argparse.Namespace) -> FolderHomoConfig:
         tau=float(args.folder_homo_tau),
         detach_anchors=bool(args.folder_homo_detach_anchors),
         use_text_context=bool(args.folder_homo_use_text_context),
+        use_contextualizer=bool(args.folder_homo_use_contextualizer),
+        organization_mode=str(args.folder_homo_organization_mode),
+        included_stages=str(args.folder_homo_included_stages),
         scorer_heads=int(args.folder_homo_scorer_heads),
         scorer_dropout=float(args.folder_homo_scorer_dropout),
         debug_shapes=bool(args.folder_homo_debug_shapes),

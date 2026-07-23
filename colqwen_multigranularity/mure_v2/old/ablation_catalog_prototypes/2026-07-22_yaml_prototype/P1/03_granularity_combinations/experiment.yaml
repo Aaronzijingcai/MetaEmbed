@@ -1,0 +1,14 @@
+suite: granularity_combinations
+base:
+  priority: P1
+  status: pending_protocol_alignment
+  backend: pairwise_granularity
+variants:
+  g1_g2:
+    description: Global and intermediate views under a matched total budget.
+  g1_g3:
+    description: Global and fine views under a matched total budget.
+  g2_g3:
+    description: Intermediate and fine views under a matched total budget.
+  g1_g2_g3:
+    description: Complete three-view representation under the same total budget.

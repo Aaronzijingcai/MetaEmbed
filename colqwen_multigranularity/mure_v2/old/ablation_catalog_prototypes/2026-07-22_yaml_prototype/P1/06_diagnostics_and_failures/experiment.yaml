@@ -1,0 +1,16 @@
+suite: diagnostics_and_failures
+base:
+  priority: P1
+  status: eval_only
+  backend: diagnostics
+variants:
+  rhc_mechanism:
+    description: Within-view redundancy and cross-view residual-evidence diagnostics.
+  interaction_length:
+    description: Query modality and query-candidate length-asymmetry diagnostics.
+  input_complexity:
+    description: Stratification by visual-token count, resolution, aspect ratio, and document type.
+  failure_cases:
+    description: Qualitative failures on OCR-dense pages, charts, natural images, and grounding tasks.
+  three_seed_variance:
+    description: Mean and standard deviation for the selected main and causal-control models.

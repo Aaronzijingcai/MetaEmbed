@@ -96,9 +96,17 @@ def _maybe_init_distributed() -> None:
 
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         backend = "nccl" if torch.cuda.is_available() else "gloo"
+        init_kwargs = {}
         if torch.cuda.is_available():
-            torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
-        dist.init_process_group(backend=backend, init_method="env://", timeout=process_group_timeout)
+            local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+            torch.cuda.set_device(local_rank)
+            init_kwargs["device_id"] = torch.device("cuda", local_rank)
+        dist.init_process_group(
+            backend=backend,
+            init_method="env://",
+            timeout=process_group_timeout,
+            **init_kwargs,
+        )
         logger.info(
             "Initialized torch.distributed (backend=%s, world_size=%s, rank=%s).",
             backend,
@@ -117,9 +125,17 @@ def _maybe_init_distributed() -> None:
     os.environ.setdefault("MASTER_PORT", "29500")
     backend = "nccl" if torch.cuda.is_available() else "gloo"
     try:
-        dist.init_process_group(backend=backend, init_method="env://", timeout=process_group_timeout)
+        init_kwargs = {}
         if torch.cuda.is_available():
-            torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
+            local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+            torch.cuda.set_device(local_rank)
+            init_kwargs["device_id"] = torch.device("cuda", local_rank)
+        dist.init_process_group(
+            backend=backend,
+            init_method="env://",
+            timeout=process_group_timeout,
+            **init_kwargs,
+        )
         logger.info(
             "Initialized torch.distributed (backend=%s, world_size=%s, rank=%s).",
             backend,
@@ -309,10 +325,25 @@ def build_processor(args: argparse.Namespace) -> MRLColQwen2_5Processor:
     }
     if args.processor_max_length is not None:
         processor_kwargs["processor_max_length"] = args.processor_max_length
-    return MRLColQwen2_5Processor.from_pretrained(
+    processor = MRLColQwen2_5Processor.from_pretrained(
         args.processor_name_or_path,
         **processor_kwargs,
     )
+    expected_max_pixels = int(args.max_num_visual_tokens) * 28 * 28
+    effective_max_pixels = int(getattr(processor.image_processor, "max_pixels", -1))
+    effective_longest_edge = int(processor.image_processor.size["longest_edge"])
+    if effective_max_pixels != expected_max_pixels or effective_longest_edge != expected_max_pixels:
+        raise RuntimeError(
+            "Visual-token limit is not effective: "
+            f"configured={args.max_num_visual_tokens} expected_max_pixels={expected_max_pixels} "
+            f"max_pixels={effective_max_pixels} longest_edge={effective_longest_edge}"
+        )
+    logger.info(
+        "Verified visual-token limit: max_tokens_per_crop=%d max_pixels=%d",
+        args.max_num_visual_tokens,
+        effective_max_pixels,
+    )
+    return processor
 
 
 def build_model(args: argparse.Namespace):
@@ -338,6 +369,9 @@ def _training_report_to():
 
 
 def build_training_arguments(args: argparse.Namespace) -> TrainingArguments:
+    checkpoint_use_reentrant = os.environ.get(
+        "MURE_GRADIENT_CHECKPOINTING_REENTRANT", "1"
+    ).strip().lower() in {"1", "true", "yes", "y"}
     return TrainingArguments(
         output_dir=args.output_dir,
         overwrite_output_dir=False,
@@ -346,7 +380,9 @@ def build_training_arguments(args: argparse.Namespace) -> TrainingArguments:
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_checkpointing=args.gradient_checkpointing,
-        gradient_checkpointing_kwargs={"use_reentrant": False} if args.gradient_checkpointing else None,
+        gradient_checkpointing_kwargs={"use_reentrant": checkpoint_use_reentrant}
+        if args.gradient_checkpointing
+        else None,
         eval_strategy="no",
         save_strategy="steps",
         save_steps=args.save_steps,

@@ -53,7 +53,7 @@ if [[ -z "${SCORERS:-}" ]]; then
       SCORERS=(bi_topk_sum32_lam07 bi_topk_sum48_lam07 bi_topk_sum64_lam07 bi_topk_mean32_lam07 bi_topk_mean48_lam07 bi_topk_mean64_lam07)
       ;;
     adaptive3)
-      SCORERS=(bi_topk_mean48_adaptive_lam08 bi_topk_sum48_adaptive_lam08 bi_topk_mean48_hard_adaptive)
+      SCORERS=(bi_topk_mean48_adaptive_lam08 bi_topk_sum48_adaptive_lam08)
       ;;
     missing3)
       SCORERS=(q2d_topk_sum16 q2d_topk_sum32 q2d_topk_sum48 q2d_topk_sum64 q2d_topk_sum96 q2d_topk_sum128 bi_sum_lam05 bi_sum_lam07 bi_sum_lam09 bi_topk_sum32_lam05 bi_topk_sum32_lam07 bi_topk_sum64_lam05 bi_topk_sum64_lam07)
@@ -155,7 +155,6 @@ reset_scorer() {
   MAXSIM_QUERY_DROP_SUFFIX=0
   MAXSIM_QUERY_AGG=sum
   MAXSIM_QUERY_TOPK=0
-  MAXSIM_ADAPTIVE_RATIO=1.5
   MAXSIM_LENGTH_NORM_ALPHA=0.0
   MAXSIM_HIT_PENALTY_WEIGHT=0.0
   MAXSIM_HIT_PENALTY_THRESHOLD=0.35
@@ -310,14 +309,6 @@ configure_scorer() {
       MAXSIM_QUERY_TOPK=${MAXSIM_QUERY_TOPK%_adaptive_lam08}
       MAXSIM_BI_LAMBDA=0.8
       ;;
-    bi_topk_mean*_hard_adaptive)
-      MAXSIM_INTERACTION=bi_query_topk_hard_adaptive
-      MAXSIM_QUERY_AGG=mean
-      MAXSIM_QUERY_TOPK=${scorer#bi_topk_mean}
-      MAXSIM_QUERY_TOPK=${MAXSIM_QUERY_TOPK%_hard_adaptive}
-      MAXSIM_BI_LAMBDA=0.5
-      MAXSIM_ADAPTIVE_RATIO=1.5
-      ;;
     bi_query_topk*_lam05)
       MAXSIM_INTERACTION=bi_query_topk
       MAXSIM_QUERY_AGG=mean
@@ -376,7 +367,7 @@ configure_scorer() {
 }
 
 print_scorer() {
-  echo "[maxsim_eval] scorer=$1 interaction=$MAXSIM_INTERACTION bi_lambda=$MAXSIM_BI_LAMBDA lse_beta=$MAXSIM_LSE_BETA global_weight=$MAXSIM_GLOBAL_WEIGHT query_agg=$MAXSIM_QUERY_AGG query_topk=$MAXSIM_QUERY_TOPK adaptive_ratio=$MAXSIM_ADAPTIVE_RATIO"
+  echo "[maxsim_eval] scorer=$1 interaction=$MAXSIM_INTERACTION bi_lambda=$MAXSIM_BI_LAMBDA lse_beta=$MAXSIM_LSE_BETA global_weight=$MAXSIM_GLOBAL_WEIGHT query_agg=$MAXSIM_QUERY_AGG query_topk=$MAXSIM_QUERY_TOPK"
 }
 
 run_mmeb_worst10() {
@@ -423,7 +414,6 @@ run_mmeb_worst10() {
   MAXSIM_QUERY_DROP_SUFFIX="$MAXSIM_QUERY_DROP_SUFFIX" \
   MAXSIM_QUERY_AGG="$MAXSIM_QUERY_AGG" \
   MAXSIM_QUERY_TOPK="$MAXSIM_QUERY_TOPK" \
-  MAXSIM_ADAPTIVE_RATIO="$MAXSIM_ADAPTIVE_RATIO" \
   MAXSIM_LENGTH_NORM_ALPHA="$MAXSIM_LENGTH_NORM_ALPHA" \
   MAXSIM_HIT_PENALTY_WEIGHT="$MAXSIM_HIT_PENALTY_WEIGHT" \
   MAXSIM_HIT_PENALTY_THRESHOLD="$MAXSIM_HIT_PENALTY_THRESHOLD" \
@@ -489,7 +479,6 @@ run_vidore_v2() {
     --maxsim-query-drop-suffix "$MAXSIM_QUERY_DROP_SUFFIX" \
     --maxsim-query-agg "$MAXSIM_QUERY_AGG" \
     --maxsim-query-topk "$MAXSIM_QUERY_TOPK" \
-    --maxsim-adaptive-ratio "$MAXSIM_ADAPTIVE_RATIO" \
     --maxsim-length-norm-alpha "$MAXSIM_LENGTH_NORM_ALPHA" \
     --maxsim-hit-penalty-weight "$MAXSIM_HIT_PENALTY_WEIGHT" \
     --maxsim-hit-penalty-threshold "$MAXSIM_HIT_PENALTY_THRESHOLD" \

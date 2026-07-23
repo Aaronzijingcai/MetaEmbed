@@ -35,12 +35,30 @@ class StageCompressMRLInBatchNegativeLoss(MRLInBatchNegativeLoss):
         )
 
     def _stage_lengths(self, total_image: torch.Tensor) -> torch.Tensor:
+        organization = getattr(self.compress_config, 'normalized_organization_mode', None)
+        if callable(organization) and organization() == 'flat':
+            remaining = total_image.to(dtype=torch.long)
+            flat_lengths = []
+            for budget in self.compress_config.budgets:
+                length = torch.minimum(remaining, torch.full_like(remaining, int(budget)))
+                flat_lengths.append(length)
+                remaining = (remaining - length).clamp_min(0)
+            return torch.stack(flat_lengths, dim=1)
         cumulative = self.cumulative_crop_counts.to(device=total_image.device, dtype=torch.float32)
         scaled_end = total_image.to(torch.float32).unsqueeze(1) * cumulative.unsqueeze(0) / float(self.total_crop_count)
         ends = torch.floor(scaled_end).to(torch.long)
         ends = torch.minimum(ends, total_image.unsqueeze(1))
         starts = torch.cat([torch.zeros_like(ends[:, :1]), ends[:, :-1]], dim=1)
         original_lengths = (ends - starts).clamp_min(0)
+        included_stage_ids = getattr(self.compress_config, 'included_stage_ids', None)
+        if callable(included_stage_ids):
+            included = set(included_stage_ids())
+            include_mask = torch.tensor(
+                [index in included for index in range(3)],
+                dtype=torch.bool,
+                device=total_image.device,
+            ).unsqueeze(0)
+            original_lengths = torch.where(include_mask, original_lengths, torch.zeros_like(original_lengths))
         if (not self.compress_config.enabled) or self.compress_config.compress_stages.lower() in {'none', 'off', 'false'}:
             return original_lengths
         budgets = torch.tensor(self.compress_config.budgets, dtype=torch.long, device=total_image.device).unsqueeze(0)

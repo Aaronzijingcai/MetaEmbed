@@ -49,7 +49,6 @@ def _mure_maxsim_config() -> Dict[str, Union[int, float, str]]:
         "bi_query_topk_sum",
         "bi_query_topk_adaptive",
         "bi_query_topk_sum_adaptive",
-        "bi_query_topk_hard_adaptive",
         "bi_topk_mean",
         "lse",
         "bi_lse",
@@ -64,7 +63,6 @@ def _mure_maxsim_config() -> Dict[str, Union[int, float, str]]:
         "query_drop_suffix": max(0, _mure_env_int("MURE_MAXSIM_QUERY_DROP_SUFFIX", 0)),
         "query_agg": query_agg,
         "query_topk": max(0, _mure_env_int("MURE_MAXSIM_QUERY_TOPK", 0)),
-        "adaptive_ratio": max(1.0, _mure_env_float("MURE_MAXSIM_ADAPTIVE_RATIO", 1.5)),
         "length_norm_alpha": max(0.0, _mure_env_float("MURE_MAXSIM_LENGTH_NORM_ALPHA", 0.0)),
         "hit_penalty_weight": max(0.0, _mure_env_float("MURE_MAXSIM_HIT_PENALTY_WEIGHT", 0.0)),
         "hit_penalty_threshold": min(1.0, max(0.0, _mure_env_float("MURE_MAXSIM_HIT_PENALTY_THRESHOLD", 0.35))),
@@ -265,7 +263,6 @@ def _mure_aggregate_interaction(
         "bi_query_topk_sum",
         "bi_query_topk_adaptive",
         "bi_query_topk_sum_adaptive",
-        "bi_query_topk_hard_adaptive",
     }:
         configured_k = int(config["query_topk"])
         k_q2d = configured_k if configured_k > 0 else min(64, int(masked_similarity.shape[2]))
@@ -312,14 +309,6 @@ def _mure_aggregate_interaction(
 
     if interaction == "d2q_mean":
         return d2q
-    if interaction == "bi_query_topk_hard_adaptive":
-        query_len = query_mask.sum(dim=1).float().clamp_min(1.0)[:, None]
-        doc_len = doc_mask.sum(dim=1).float().clamp_min(1.0)[None, :]
-        ratio = float(config["adaptive_ratio"])
-        use_q2d = doc_len >= query_len * ratio
-        use_d2q = query_len >= doc_len * ratio
-        bi = 0.5 * q2d + 0.5 * d2q
-        return torch.where(use_q2d, q2d, torch.where(use_d2q, d2q, bi)).to(dtype=q2d.dtype)
     if interaction in {"bi_adaptive", "bi_query_topk_adaptive", "bi_query_topk_sum_adaptive"}:
         query_len = query_mask.sum(dim=1).float().clamp_min(1.0)[:, None]
         doc_len = doc_mask.sum(dim=1).float().clamp_min(1.0)[None, :]
